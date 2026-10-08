@@ -4,10 +4,12 @@ import { BookmarkCheckIcon, BookmarkIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Filters } from "@/lib/schemas/filters"
+import { cn } from "@/lib/utils"
 import { useIsSaved, useSaveBrief } from "../hooks"
 
 /**
- * "Save search" next to the result count. Saves the brief the results are for plus the filters as currently
+ * "Save search" next to the result count: an outline pill with icon + label, tinted "Saved" once saved (the
+ * toast offers View). Saves the brief the results are for plus the filters as currently
  * edited. Disabled (with a tooltip saying why) until there is a search; shows "Saved" once this exact search is.
  */
 export function SaveSearchButton({ brief, filters }: { brief?: string; filters?: Filters }) {
@@ -24,7 +26,7 @@ export function SaveSearchButton({ brief, filters }: { brief?: string; filters?:
             tabIndex={0}
             className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            <Button variant="ghost" size="sm" disabled className="max-md:h-11" tabIndex={-1}>
+            <Button variant="outline" size="sm" disabled className="max-sm:h-10" tabIndex={-1}>
               <BookmarkIcon aria-hidden />
               Save search
             </Button>
@@ -37,9 +39,12 @@ export function SaveSearchButton({ brief, filters }: { brief?: string; filters?:
 
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="sm"
-      className="max-md:h-11"
+      className={cn(
+        "max-sm:h-10",
+        saved && "border-primary/25 bg-primary-subtle text-primary-subtle-foreground disabled:opacity-100 dark:bg-primary-subtle",
+      )}
       disabled={saved || save.isPending}
       aria-label={saved ? "Search saved" : undefined}
       onClick={() => save.mutate({ brief, filters })}

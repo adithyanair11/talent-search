@@ -18,9 +18,9 @@ export function SavedSearchesSidebar() {
   let items: React.ReactNode
   if (saved.isPending) {
     items = [0, 1, 2].map((i) => (
-      <li key={i} className="flex h-8 items-center gap-2 px-2">
-        <Skeleton className="size-4" />
-        <Skeleton className={cn("h-3.5", i === 1 ? "w-24" : "w-32")} />
+      <li key={i} className="flex h-9 items-center gap-2.5 px-3">
+        <Skeleton className="size-4 rounded-full" />
+        <Skeleton className={cn("h-3.5 rounded-full", i === 1 ? "w-24" : "w-32")} />
       </li>
     ))
   } else if (saved.isError) {
@@ -35,7 +35,11 @@ export function SavedSearchesSidebar() {
       </li>
     )
   } else if (saved.data.length === 0) {
-    items = <li className="px-2 py-1 text-sm text-muted-foreground">Save a search to re-run it later.</li>
+    items = (
+      <li className="px-3 py-1 text-sm text-pretty text-muted-foreground">
+        Searches you save show up here, ready to re-run.
+      </li>
+    )
   } else {
     items = (
       <>
@@ -54,7 +58,7 @@ export function SavedSearchesSidebar() {
           <li>
             <Link
               href="/saved"
-              className="flex h-8 items-center rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/50"
+              className="flex h-8 items-center rounded-full px-3 text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/50"
             >
               View all {saved.data.length}
             </Link>
@@ -64,5 +68,5 @@ export function SavedSearchesSidebar() {
     )
   }
 
-  return <SidebarSection title="Saved searches">{items}</SidebarSection>
+  return <SidebarSection title="Recent saved">{items}</SidebarSection>
 }

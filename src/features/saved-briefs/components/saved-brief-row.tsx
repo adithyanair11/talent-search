@@ -37,7 +37,7 @@ export const SavedBriefRow = memo(function SavedBriefRow({
   return (
     <li className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:gap-4 sm:px-5">
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="line-clamp-2 font-medium text-pretty break-words">{saved.brief}</p>
+        <p className="line-clamp-2 text-base font-semibold tracking-[-0.005em] text-pretty break-words">{saved.brief}</p>
         {chips.length > 0 && (
           <ul aria-label="Filters" className="flex flex-wrap gap-1.5">
             {chips.map((c) => (
@@ -60,13 +60,13 @@ export const SavedBriefRow = memo(function SavedBriefRow({
         <Button
           variant="outline"
           size="sm"
-          className="max-sm:h-11 max-sm:flex-1"
+          className="max-sm:h-11 max-sm:flex-1 sm:px-3.5"
           disabled={running || disabled}
           onClick={() => onRun(saved)}
           aria-label={`Run saved search: ${saved.brief}`}
         >
           {running ? <Loader2Icon aria-hidden className="animate-spin" /> : <PlayIcon aria-hidden />}
-          {running ? "Running…" : "Run"}
+          {running ? "Running…" : "Run search"}
         </Button>
         <Button
           variant="ghost"
@@ -86,15 +86,15 @@ export function SavedBriefRowSkeleton() {
   return (
     <li className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:gap-4 sm:px-5">
       <div className="flex-1 space-y-2.5">
-        <Skeleton className="h-4 w-4/5" />
+        <Skeleton className="h-4 w-4/5 rounded-full" />
         <div className="flex gap-1.5">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-5 w-20" />
-          <Skeleton className="h-5 w-28" />
+          <Skeleton className="h-6 w-24 rounded-full" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+          <Skeleton className="h-6 w-28 rounded-full" />
         </div>
-        <Skeleton className="h-3.5 w-24" />
+        <Skeleton className="h-3.5 w-24 rounded-full" />
       </div>
-      <Skeleton className="h-11 w-full sm:h-8 sm:w-16" />
+      <Skeleton className="h-11 w-full rounded-full sm:h-8 sm:w-28" />
     </li>
   )
 }

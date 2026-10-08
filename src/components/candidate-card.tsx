@@ -43,8 +43,8 @@ export type CandidateCardProps = {
 
 /**
  * One ranked result: avatar, name, title · company, location, years and three key skills (matched first,
- * tinted). The whole card opens the sheet (stretched button on the name); the shortlist control sits
- * above it, revealed on hover/focus with a fine pointer and always visible on touch or when shortlisted.
+ * tinted). The whole card opens the sheet (stretched button on the name); the always-visible shortlist
+ * control sits above it.
  * Memoised — pass stable callbacks.
  */
 export const CandidateCard = memo(function CandidateCard({
@@ -149,15 +149,8 @@ export const CandidateCard = memo(function CandidateCard({
       </div>
 
       {renderShortlist && (
-        <div
-          className={cn(
-            "relative z-10 -mt-1.5 -mr-2 shrink-0 self-start transition-opacity duration-150",
-            // Fine pointers: reveal on hover / focus; touch: always visible. Shortlisted or menu open: always.
-            "pointer-fine:opacity-0 pointer-fine:group-hover/card:opacity-100 pointer-fine:group-focus-within/card:opacity-100",
-            "pointer-fine:has-[[aria-pressed=true]]:opacity-100 pointer-fine:has-[[data-state=open]]:opacity-100 pointer-fine:has-[:disabled]:opacity-100",
-            selected && "pointer-fine:opacity-100",
-          )}
-        >
+        // Always visible: shortlisting is the main action on a result, so it must be obvious at first glance.
+        <div className="relative z-10 -mt-1.5 -mr-1.5 shrink-0 self-start sm:mt-0 sm:mr-0">
           {renderShortlist(c, shortlisted)}
         </div>
       )}
@@ -166,8 +159,9 @@ export const CandidateCard = memo(function CandidateCard({
 })
 
 /**
- * The bookmark on a card: filled accent when the person is on any shortlist (`aria-pressed`), a spinner while
- * pending. Forwards props and ref so a Popover / Drawer trigger can wrap it (`asChild`).
+ * The shortlist control on a card: a "Shortlist" pill with a bookmark (icon-only, 44px, below `sm`). Tinted with a
+ * filled bookmark and "Shortlisted" when the person is on any list (`aria-pressed`), a spinner while pending.
+ * Forwards props and ref so a Popover / Drawer trigger can wrap it (`asChild`).
  */
 export function ShortlistIconButton({
   name,
@@ -183,19 +177,24 @@ export function ShortlistIconButton({
       aria-pressed={shortlisted}
       aria-label={shortlisted ? `${name} is shortlisted — change lists` : `Shortlist ${name}`}
       className={cn(
-        "flex size-11 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none sm:size-9",
-        "hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-        "data-[state=open]:bg-accent data-[state=open]:text-foreground",
-        shortlisted && "bg-primary-subtle text-primary hover:bg-primary-subtle hover:text-primary data-[state=open]:text-primary",
+        "flex size-11 items-center justify-center gap-1.5 rounded-full border border-border bg-card text-sm font-medium text-muted-foreground transition-colors outline-none",
+        "sm:h-8 sm:w-auto sm:pr-3 sm:pl-2.5",
+        "hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        "data-[state=open]:border-border-strong data-[state=open]:text-foreground",
+        shortlisted &&
+          "border-primary/25 bg-primary-subtle text-primary-subtle-foreground hover:border-primary/40 hover:text-primary-subtle-foreground data-[state=open]:text-primary-subtle-foreground",
         className,
       )}
       {...props}
     >
       {pending ? (
-        <Loader2Icon className="size-4 animate-spin" />
+        <Loader2Icon aria-hidden className="size-4 animate-spin" />
       ) : (
-        <BookmarkIcon className={cn("size-4", shortlisted && "fill-current")} />
+        <BookmarkIcon aria-hidden className={cn("size-4", shortlisted && "fill-current")} />
       )}
+      <span aria-hidden className="max-sm:hidden">
+        {shortlisted ? "Shortlisted" : "Shortlist"}
+      </span>
     </button>
   )
 }

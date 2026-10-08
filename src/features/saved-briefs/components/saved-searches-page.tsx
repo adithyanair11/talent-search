@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { useDeleteSavedBrief, useRunSavedSearch, useSavedBriefs } from "../hooks"
 import { SavedBriefRow, SavedBriefRowSkeleton } from "./saved-brief-row"
 
-const LIST = "divide-y divide-border rounded-lg border border-border"
+const LIST = "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+const STATE_CARD = "rounded-2xl border border-border bg-card"
 
 /** /saved: every saved search, newest first, with Run (a new search) and Delete + Undo. */
 export function SavedSearchesPage() {
@@ -27,25 +28,29 @@ export function SavedSearchesPage() {
     )
   } else if (saved.isError) {
     body = (
-      <ErrorState
-        title="Couldn't load your saved searches"
-        message={saved.error.message}
-        onRetry={() => void saved.refetch()}
-        retrying={saved.isFetching}
-      />
+      <div className={STATE_CARD}>
+        <ErrorState
+          title="Couldn't load your saved searches"
+          message="They're still saved. Check your connection and try again."
+          onRetry={() => void saved.refetch()}
+          retrying={saved.isFetching}
+        />
+      </div>
     )
   } else if (saved.data.length === 0) {
     body = (
-      <EmptyState
-        icon={HistoryIcon}
-        title="No saved searches yet"
-        description="After a search, use “Save search” next to the result count. Saving keeps the brief and the filters as you edited them, so anyone at your company can re-run it later and get fresh results."
-        action={
-          <Button asChild variant="outline">
-            <Link href="/search">Start a search</Link>
-          </Button>
-        }
-      />
+      <div className={STATE_CARD}>
+        <EmptyState
+          icon={HistoryIcon}
+          title="No saved searches yet"
+          description="After a search, press Save search above the results. We keep the brief and your edited filters so anyone at your company can re-run it for fresh results."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/search">Start a search</Link>
+            </Button>
+          }
+        />
+      </div>
     )
   } else {
     body = (
@@ -66,10 +71,10 @@ export function SavedSearchesPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:py-10">
-      <div className="mb-6 space-y-1">
+      <div className="mb-6 space-y-1 md:mb-8">
         <h1 className="text-2xl font-semibold">Saved searches</h1>
-        <p className="text-sm text-muted-foreground">
-          Running one starts a new search with the same brief and filters.
+        <p className="text-sm text-pretty text-muted-foreground">
+          Running one starts a fresh search with the same brief and filters, so it counts as a search on the free plan.
         </p>
       </div>
       {body}

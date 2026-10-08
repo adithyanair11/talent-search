@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation"
 import { Suspense } from "react"
 import {
   AppShell,
+  Brand,
   SidebarBody,
   SidebarFooter,
   SidebarHeader,
@@ -83,7 +84,7 @@ function Plan() {
         type="button"
         onClick={() => refetch()}
         disabled={isFetching}
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <RotateCwIcon aria-hidden className={isFetching ? "size-3 animate-spin" : "size-3"} />
         Plan unavailable · Retry
@@ -102,7 +103,7 @@ function Upgrade() {
 
 /**
  * The signed-in app frame. `account` is the server-rendered company/account menu (streamed in behind
- * Suspense because it reads the session); it appears in the sidebar header and the mobile top bar.
+ * Suspense because it reads the session); it sits at the foot of the sidebar and on the left of the mobile top bar.
  */
 export function AppFrame({ account, children }: { account: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -110,7 +111,9 @@ export function AppFrame({ account, children }: { account: React.ReactNode; chil
       <AppShell
         sidebar={
           <>
-            <SidebarHeader>{account}</SidebarHeader>
+            <SidebarHeader>
+              <Brand />
+            </SidebarHeader>
             <SidebarBody>
               <SidebarSection>
                 <Nav kind="sidebar" />
@@ -118,8 +121,13 @@ export function AppFrame({ account, children }: { account: React.ReactNode; chil
               <SavedSearchesSidebar />
             </SidebarBody>
             <SidebarFooter>
-              <Plan />
-              <ThemeToggle />
+              <div className="flex w-full min-w-0 flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Plan />
+                  <ThemeToggle />
+                </div>
+                <div className="border-t border-sidebar-border pt-3">{account}</div>
+              </div>
             </SidebarFooter>
           </>
         }

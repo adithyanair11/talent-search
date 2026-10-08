@@ -159,18 +159,21 @@ export function AddFilterChip({
 export function FilterChipList({
   children,
   className,
+  listClassName,
   label = "Search filters",
   heading,
   onClear,
 }: {
   children: React.ReactNode
   className?: string
+  /** Classes for the row of chips itself (e.g. a horizontally scrolling row on mobile). */
+  listClassName?: string
   label?: string
   heading?: string
   onClear?: () => void
 }) {
   const chips = (
-    <div role="group" aria-label={label} className={cn("flex flex-wrap items-center gap-2", !heading && className)}>
+    <div role="group" aria-label={label} className={cn("flex flex-wrap items-center gap-2", !heading && className, listClassName)}>
       {children}
     </div>
   )

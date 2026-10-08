@@ -45,19 +45,24 @@ function isListKey(key: ConstraintKey): key is ListKey {
 }
 
 /**
- * "We understood": one chip per filter, each editable in a popover (values from the data vocabulary)
- * and removable. Every edit is reported through `onEdit`; the owner debounces and re-runs the search.
+ * "Understood": one chip per filter, each editable in a popover (values from the data vocabulary) and removable
+ * with its ×. Every edit is reported through `onEdit`; the owner debounces and re-runs the search.
+ * `animateIn` plays the chips' entrance (only when a new brief's chips first appear, never on edits).
  */
 export function SearchFilters({
   filters,
   onEdit,
   onRemove,
   onRemoveUnsupported,
+  onClear,
+  animateIn = false,
 }: {
   filters: Filters
   onEdit: Edit
   onRemove: (chip: Chip) => void
   onRemoveUnsupported: (item: string) => void
+  onClear?: () => void
+  animateIn?: boolean
 }) {
   const chips = chipsFor(filters)
   const unsupported = filters.unsupported ?? []
@@ -68,30 +73,36 @@ export function SearchFilters({
 
   return (
     <FilterChipList
-      label="We understood"
+      label="Understood filters"
+      heading="Understood"
+      onClear={onClear}
       // Mobile: one horizontally scrolling row; the bleed keeps chips flush with the page gutter.
-      className="max-sm:-mx-4 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:pb-1 max-sm:[scrollbar-width:none] max-sm:[&>*]:shrink-0"
+      listClassName="max-sm:-mx-4 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:pb-1 max-sm:[scrollbar-width:none] max-sm:[&>*]:shrink-0"
     >
-      {chips.map((chip) => (
+      {chips.map((chip, i) => (
         <FilterChip
           key={chip.key}
           label={chip.label}
           value={chip.value}
           className="max-w-72"
+          animateIn={animateIn}
+          index={i}
           open={openChip === chip.key}
           onOpenChange={(open) => setOpenChip(open ? chip.key : null)}
           onRemove={() => onRemove(chip)}
           editor={<FilterEditor filterKey={chip.key} filters={filters} onEdit={onEdit} />}
         />
       ))}
-      {unsupported.map((item) => (
+      {unsupported.map((item, i) => (
         <FilterChip
           key={`unsupported:${item}`}
-          label="Ignored"
+          label="Can't search"
           value={item}
           unsupported
-          hint="Not in our data — ignored"
+          hint="Not in our candidate data, so it isn't applied"
           className="max-w-72"
+          animateIn={animateIn}
+          index={chips.length + i}
           onRemove={() => onRemoveUnsupported(item)}
         />
       ))}

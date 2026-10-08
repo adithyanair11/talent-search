@@ -32,6 +32,8 @@ export type ComposerProps = {
   /** Hero only: example briefs shown as pills under the box. */
   suggestions?: readonly ComposerSuggestion[]
   onSuggestion?: (brief: string) => void
+  /** A quiet line under the box (e.g. the free-plan quota). Centred in the hero, right-aligned when docked. */
+  meta?: React.ReactNode
   className?: string
 }
 
@@ -60,6 +62,7 @@ export function Composer({
   description,
   suggestions,
   onSuggestion,
+  meta,
   className,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -214,6 +217,8 @@ export function Composer({
           {tooLong ? `Keep the brief under ${BRIEF_MAX_LENGTH} characters.` : error}
         </p>
       )}
+
+      {meta && <div className={cn("mt-2.5 flex min-h-5 w-full items-center", hero ? "justify-center" : "justify-end px-1")}>{meta}</div>}
 
       {hero && suggestions && suggestions.length > 0 && (
         <ul aria-label="Example briefs" className="mt-6 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center">

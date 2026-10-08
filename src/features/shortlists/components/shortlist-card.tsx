@@ -1,13 +1,12 @@
 "use client"
 
 import type { Route } from "next"
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import { ArrowRightIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { memo, useRef, useState } from "react"
 import { AvatarStack } from "@/components/avatar-stack"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { ShortlistSummary } from "@/lib/schemas/shortlists"
+import { cn } from "@/lib/utils"
 import { useRenameShortlist } from "../hooks"
 import { NameForm } from "./name-form"
 
@@ -43,7 +43,12 @@ export const ShortlistCard = memo(function ShortlistCard({
   const keepFocus = useRef(false)
 
   return (
-    <Card className="relative gap-0 p-4 transition-colors has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring/50 hover:bg-accent/40">
+    <div
+      className={cn(
+        "group/list relative flex h-full flex-col rounded-xl border border-border bg-card p-4 transition-[border-color,box-shadow] duration-200 sm:p-5",
+        "hover:border-border-strong hover:shadow-sm has-[a:focus-visible]:border-border-strong has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/40",
+      )}
+    >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           {renaming ? (
@@ -59,7 +64,7 @@ export const ShortlistCard = memo(function ShortlistCard({
               className="relative z-10"
             />
           ) : (
-            <h2 className="truncate text-base font-medium">
+            <h2 className="truncate text-base font-semibold tracking-[-0.005em]">
               <Link
                 href={`/shortlists/${list.id}` as Route}
                 className="outline-none after:absolute after:inset-0 after:rounded-[inherit] after:content-['']"
@@ -101,12 +106,16 @@ export const ShortlistCard = memo(function ShortlistCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="mt-4 flex h-6 items-center">
+      <div className="mt-auto flex h-6 items-center justify-between gap-3 pt-5">
         {list.count > 0 ? (
           <AvatarStack urls={list.avatar_urls} total={list.count} />
         ) : (
-          <span className="text-sm text-muted-foreground">Empty</span>
+          <span className="text-sm text-muted-foreground">No one yet</span>
         )}
+        <ArrowRightIcon
+          aria-hidden
+          className="size-4 text-muted-foreground transition-transform duration-150 group-hover/list:translate-x-0.5 group-hover/list:text-foreground"
+        />
       </div>
       {confirming && (
         <ConfirmDialog
@@ -122,20 +131,20 @@ export const ShortlistCard = memo(function ShortlistCard({
           onConfirm={() => onDelete(list)}
         />
       )}
-    </Card>
+    </div>
   )
 })
 
 export function ShortlistCardSkeleton() {
   return (
-    <Card className="gap-0 p-4" aria-hidden>
-      <Skeleton className="h-4 w-36" />
-      <Skeleton className="mt-2 h-3.5 w-16" />
-      <div className="mt-4 flex -space-x-1.5">
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5" aria-hidden>
+      <Skeleton className="h-4 w-36 rounded-full" />
+      <Skeleton className="mt-2 h-3.5 w-16 rounded-full" />
+      <div className="mt-5 flex -space-x-1.5">
         {Array.from({ length: 4 }, (_, i) => (
           <Skeleton key={i} className="size-6 rounded-full ring-2 ring-card" />
         ))}
       </div>
-    </Card>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import type { Route } from "next"
-import { CircleAlertIcon, Loader2Icon } from "lucide-react"
+import { ArrowRightIcon, CircleAlertIcon, Loader2Icon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -84,7 +84,7 @@ export function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={signIn.error === "invalid_credentials" || undefined}
-            className="h-11 md:h-9"
+            className="h-11 md:text-base"
           />
         </div>
         <div className="space-y-1.5">
@@ -100,7 +100,7 @@ export function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             aria-invalid={signIn.error === "invalid_credentials" || undefined}
-            className="h-11 md:h-9"
+            className="h-11 md:text-base"
           />
         </div>
 
@@ -108,28 +108,29 @@ export function LoginForm() {
           <p
             id={errorId}
             role="alert"
-            className="flex items-start gap-2 rounded-md bg-destructive-subtle px-3 py-2 text-sm text-destructive"
+            className="flex items-start gap-2 rounded-xl border border-destructive/15 bg-destructive-subtle px-3 py-2.5 text-sm text-destructive"
           >
             <CircleAlertIcon aria-hidden className="mt-px size-4 shrink-0" />
             {error}
           </p>
         )}
 
-        <Button ref={submitRef} type="submit" className="h-11 w-full md:h-9" disabled={pending}>
+        <Button ref={submitRef} type="submit" size="lg" className="w-full" disabled={pending}>
           {pending && <Loader2Icon aria-hidden className="animate-spin" />}
           {pending ? "Signing in…" : "Sign in"}
+          {!pending && <ArrowRightIcon aria-hidden />}
         </Button>
       </form>
 
-      <section aria-labelledby="demo-accounts" className="space-y-2">
+      <section aria-labelledby="demo-accounts" className="space-y-3">
         <div className="flex items-center gap-3">
           <span className="h-px flex-1 bg-border" />
-          <h2 id="demo-accounts" className="text-xs font-medium text-muted-foreground">
-            Demo accounts
+          <h2 id="demo-accounts" className="text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase">
+            Try a demo account
           </h2>
           <span className="h-px flex-1 bg-border" />
         </div>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid gap-2">
           {DEMO_ACCOUNTS.map((account) => {
             const selected = email === account.email && password === DEMO_PASSWORD
             return (
@@ -139,20 +140,31 @@ export function LoginForm() {
                   onClick={() => fill(account.email)}
                   disabled={pending}
                   aria-pressed={selected}
+                  aria-label={`Fill in the ${account.company} demo account (${account.email})`}
                   className={cn(
-                    "flex min-h-11 w-full flex-col items-start rounded-md border border-border px-3 py-2 text-left outline-none transition-colors",
-                    "hover:border-border-strong hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50",
-                    selected && "border-primary/40 bg-primary-subtle hover:bg-primary-subtle",
+                    "flex min-h-14 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left outline-none transition-[border-color,box-shadow,background-color]",
+                    "hover:border-border-strong hover:shadow-sm focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-50",
+                    selected && "border-primary/40 bg-primary-subtle hover:border-primary/50",
                   )}
                 >
-                  <span className="text-base font-medium">{account.company}</span>
-                  <span className="max-w-full truncate text-sm text-muted-foreground">{account.email}</span>
+                  <span
+                    aria-hidden
+                    className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-sm font-semibold text-background"
+                  >
+                    {account.company.charAt(0)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-base font-semibold">{account.company}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{account.email}</span>
+                  </span>
                 </button>
               </li>
             )
           })}
         </ul>
-        <p className="text-sm text-muted-foreground">Fills the form with a seeded recruiter. Each company sees only its own data.</p>
+        <p className="text-sm text-pretty text-muted-foreground">
+          One click fills the form. Each company only ever sees its own lists and searches.
+        </p>
       </section>
     </div>
   )

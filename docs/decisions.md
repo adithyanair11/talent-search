@@ -590,8 +590,7 @@ expected sets don't depend on the code under test.
   the candidate, which it never does.
 - **`CandidateCard` is the new result component; `CandidateRow` is its `row` appearance.** Existing pages
   (shortlist detail, the virtualised result list) keep their imports and their hairline-divided
-  `CandidateList`. `SearchBar` is now a thin wrapper over the docked `Composer`. The real pages switch to the
-  new components in the next task.
+  `CandidateList`. `SearchBar` is now a thin wrapper over the docked `Composer`.
 - **The dark variant is `&:where(.dark *, .theme-dark, .theme-dark *):not(:where(.theme-light, .theme-light *))`.**
   This lets `/dev/design` render light and dark panes side by side (`.theme-light` / `.theme-dark` re-declare
   the role tokens). The app itself still toggles `.dark` on `<html>` through next-themes. Overlays portal to
@@ -601,6 +600,29 @@ expected sets don't depend on the code under test.
 - **The inline shortlist-menu preview on `/dev/design` is static markup.** A mounted cmdk list calls
   `scrollIntoView` on its auto-selected item, which scrolled the page to that section on load. The interactive
   copy lives in the popover, which only mounts when opened.
-- **The card shortlist button is revealed on hover only for fine pointers (`pointer-fine:`).** On touch it is
-  always visible. It is also always visible when the person is shortlisted, when its menu is open, or while a
-  change is pending.
+- **The card shortlist button is always visible, with a "Shortlist" label from `sm` up.** It used to be revealed
+  on hover for fine pointers; applying the design to the real results page showed that hid the main action on a
+  result. Below `sm` it is a 44px round bookmark (the label would cost a third of the card's text width at 375px);
+  its `aria-label` always names the person, and the candidate sheet's sticky bottom bar has the labelled button.
+
+### Applying the design to the real screens
+
+- **Search results are standalone cards (`CandidateCard`), still window-virtualised.** Each card's wrapper
+  carries the 8px gap (`pb-2`) so measured heights include it. Shortlist pages keep the flat hairline rows: they
+  are a dense list you manage, not an answer you read.
+- **The docked composer and the understood filters share one sticky header.** "Understood filters always
+  visible" means visible while scrolling 600 results, not just at the top. On mobile the chips are one
+  horizontally scrolling row so the header stays under ≈ 200px below the top bar, even with a two-line brief.
+- **The card entrance plays once per new brief.** A search id is marked "intro" when a brief's results land and
+  unmarked after 1.5 s, so the cards and chips don't re-animate on edits, reloads, back/forward or when the
+  virtualiser remounts a card while scrolling.
+- **"Clear all" starts over instead of removing every filter.** Removing every constraint can only produce the
+  "nothing to search for" empty state (we never return everyone) and would spend a search. Clearing returns to
+  the hero composer, which runs nothing.
+- **The 402 path still goes through the API.** The client could skip the request when the cached plan says 0
+  left, but the plan can flip to paid at any moment via the webhook, so the server's cheap pre-check (no LLM
+  call) stays the source of truth. A 402 opens the UpgradeDialog; the brief stays in the composer.
+- **Search error copy is chosen by status, not the server message.** 503 and 429 say plainly that nothing was
+  used from the plan (that is the API contract); offline and anything else get their own sentence.
+- **The login page shows a still product glimpse from `lg` up** (`LoginPreview`): no names, avatars or numbers
+  that look like real data beyond one example count, and no animation, so it can't be mistaken for live results.

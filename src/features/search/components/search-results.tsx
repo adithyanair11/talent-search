@@ -2,7 +2,7 @@
 
 import { useWindowVirtualizer } from "@tanstack/react-virtual"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { CandidateList, CandidateRow, CandidateRowSkeleton } from "@/components/candidate-row"
+import { CandidateCard, CandidateCardList, CandidateCardSkeleton } from "@/components/candidate-card"
 import { ErrorState } from "@/components/error-state"
 import { renderShortlistMenu } from "@/features/shortlists/components/shortlist-menu"
 import { useShortlistedIds } from "@/features/shortlists/hooks"
@@ -10,10 +10,15 @@ import type { SearchResult } from "@/lib/schemas/search"
 
 /** Load the next page when the last rendered row is this close to the end of what's loaded. */
 const PREFETCH_ROWS = 8
+/** The entrance plays on the first page only; the stagger is capped so the last cards don't lag. */
+const INTRO_ROWS = 20
+const INTRO_STAGGER_MS = 60
+const INTRO_MAX_DELAY_MS = 480
 
 /**
- * Ranked results, virtualized against the window (the page scrolls, so the search bar can stay sticky).
+ * Ranked result cards, virtualized against the window (the page scrolls, so the composer can stay sticky).
  * Pages load on demand from the stored snapshot; the next page is fetched before the end is reached.
+ * `animateIntro` makes the first page rise in like a chat answer (once per result set).
  */
 export function SearchResults({
   results,
@@ -25,6 +30,7 @@ export function SearchResults({
   selectedId,
   onOpen,
   onPrefetch,
+  animateIntro = false,
 }: {
   results: SearchResult[]
   hasNextPage: boolean
@@ -36,6 +42,7 @@ export function SearchResults({
   selectedId: string | null
   onOpen: (id: string) => void
   onPrefetch: (id: string) => void
+  animateIntro?: boolean
 }) {
   const listRef = useRef<HTMLDivElement>(null)
   const shortlisted = useShortlistedIds()
@@ -54,7 +61,7 @@ export function SearchResults({
   const showLoaderRow = hasNextPage && !nextPageError
   const virtualizer = useWindowVirtualizer({
     count: results.length + (showLoaderRow ? 1 : 0),
-    estimateSize: () => 116,
+    estimateSize: () => 132,
     overscan: 6,
     scrollMargin,
   })
@@ -75,36 +82,43 @@ export function SearchResults({
 
   return (
     <>
-      <CandidateList ref={listRef} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+      <CandidateCardList ref={listRef} className="relative block" style={{ height: virtualizer.getTotalSize() }}>
         {items.map((item) => {
           const candidate = results[item.index]
+          const intro = animateIntro && item.index < INTRO_ROWS
           return (
             <div
               key={item.key}
               data-index={item.index}
               ref={virtualizer.measureElement}
-              className="absolute inset-x-0 top-0"
+              // The gap lives in the wrapper so measured heights include it.
+              className="absolute inset-x-0 top-0 pb-2"
               style={{ transform: `translateY(${item.start - virtualizer.options.scrollMargin}px)` }}
             >
-              {candidate ? (
-                <CandidateRow
-                  candidate={candidate}
-                  rank={item.index + 1}
-                  onOpen={onOpen}
-                  onPrefetch={onPrefetch}
-                  selected={candidate.id === selectedId}
-                  shortlisted={shortlisted.has(candidate.id)}
-                  renderShortlist={renderShortlistMenu}
-                  matchedSkills={matchedSkills}
-                  priority={item.index < 2}
-                />
-              ) : (
-                <CandidateRowSkeleton />
-              )}
+              <div
+                className={intro ? "animate-fade-up" : undefined}
+                style={intro ? { animationDelay: `${Math.min(item.index * INTRO_STAGGER_MS, INTRO_MAX_DELAY_MS)}ms` } : undefined}
+              >
+                {candidate ? (
+                  <CandidateCard
+                    candidate={candidate}
+                    rank={item.index + 1}
+                    onOpen={onOpen}
+                    onPrefetch={onPrefetch}
+                    selected={candidate.id === selectedId}
+                    shortlisted={shortlisted.has(candidate.id)}
+                    renderShortlist={renderShortlistMenu}
+                    matchedSkills={matchedSkills}
+                    priority={item.index < 2}
+                  />
+                ) : (
+                  <CandidateCardSkeleton />
+                )}
+              </div>
             </div>
           )
         })}
-      </CandidateList>
+      </CandidateCardList>
       {nextPageError && (
         <ErrorState
           variant="inline"

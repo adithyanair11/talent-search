@@ -19,6 +19,8 @@ import { useRenameShortlist, useSetMembership, useShortlist } from "../hooks"
 import { NameForm } from "./name-form"
 import { formatPeople } from "./shortlist-card"
 
+const STATE_CARD = "rounded-2xl border border-border bg-card"
+
 /** Short lists render plainly; longer ones are virtualized against the window. */
 const VIRTUALIZE_AFTER = 50
 
@@ -39,20 +41,23 @@ export function ShortlistDetailPage({ id }: { id: string }) {
   const renderRemove = useCallback(
     (c: CandidateSummary) => (
       <Button
-        variant="ghost"
-        size="icon"
-        className="text-muted-foreground max-md:size-11"
+        variant="outline"
+        size="sm"
+        className="text-muted-foreground hover:text-foreground max-sm:size-11 max-sm:px-0"
         aria-label={`Remove ${c.full_name} from this list`}
         onClick={() => setMembership({ list: { id, name }, person: c, on: false })}
       >
         <BookmarkMinusIcon />
+        <span aria-hidden className="max-sm:hidden">
+          Remove
+        </span>
       </Button>
     ),
     [id, name, setMembership],
   )
 
   const back = (
-    <Button asChild variant="ghost" size="sm" className="-ml-2.5 mb-3 text-muted-foreground max-md:h-11">
+    <Button asChild variant="ghost" size="sm" className="-ml-3 mb-4 text-muted-foreground max-md:h-11">
       <Link href="/shortlists">
         <ArrowLeftIcon /> Shortlists
       </Link>
@@ -64,8 +69,8 @@ export function ShortlistDetailPage({ id }: { id: string }) {
       <Page>
         {back}
         <div aria-hidden className="mb-6 space-y-2">
-          <Skeleton className="h-7 w-56" />
-          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-7 w-56 rounded-full" />
+          <Skeleton className="h-4 w-20 rounded-full" />
         </div>
         <CandidateListSkeleton rows={4} />
       </Page>
@@ -77,25 +82,27 @@ export function ShortlistDetailPage({ id }: { id: string }) {
     return (
       <Page>
         {back}
-        {gone ? (
-          <EmptyState
-            icon={SearchXIcon}
-            title="This shortlist doesn't exist"
-            description="It may have been deleted, or the link is incomplete."
-            action={
-              <Button asChild variant="outline">
-                <Link href="/shortlists">All shortlists</Link>
-              </Button>
-            }
-          />
-        ) : (
-          <ErrorState
-            title="Couldn't load this shortlist"
-            message={query.error.message}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
-        )}
+        <div className={STATE_CARD}>
+          {gone ? (
+            <EmptyState
+              icon={SearchXIcon}
+              title="This shortlist doesn't exist"
+              description="It may have been deleted, or the link is incomplete."
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/shortlists">All shortlists</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <ErrorState
+              title="Couldn't load this shortlist"
+              message="The list is safe. Check your connection and try again."
+              onRetry={() => void query.refetch()}
+              retrying={query.isFetching}
+            />
+          )}
+        </div>
       </Page>
     )
   }
@@ -137,18 +144,18 @@ export function ShortlistDetailPage({ id }: { id: string }) {
       </header>
 
       {list!.people.length === 0 ? (
-        <CandidateList>
+        <div className={STATE_CARD}>
           <EmptyState
             icon={BookmarkIcon}
             title="No one on this list yet"
-            description="Shortlist someone from search results with the bookmark on their row."
+            description="Run a search and press Shortlist on anyone who fits. They'll show up here."
             action={
               <Button asChild variant="outline">
                 <Link href="/search">Find candidates</Link>
               </Button>
             }
           />
-        </CandidateList>
+        </div>
       ) : list!.people.length > VIRTUALIZE_AFTER ? (
         <VirtualMembers
           people={list!.people}

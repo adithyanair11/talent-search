@@ -1,20 +1,23 @@
 "use client"
 
-import { SearchIcon, SearchXIcon, XIcon } from "lucide-react"
+import { ChartNoAxesColumnIcon, CodeIcon, SearchXIcon, ServerIcon, XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
-import { CandidateListSkeleton } from "@/components/candidate-row"
+import { CandidateCardListSkeleton } from "@/components/candidate-card"
+import type { ComposerSuggestion } from "@/components/composer"
 import { EmptyState } from "@/components/empty-state"
-import { FilterChipsSkeleton } from "@/components/filter-chip"
+import { THINKING_STEPS, ThinkingPanel, ThinkingSteps, useThinkingSteps } from "@/components/thinking-steps"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ApiError } from "@/lib/api-client"
 import type { Filters } from "@/lib/schemas/filters"
 import { type Chip, type ConstraintKey, chipsFor, hasConstraints } from "../filter-model"
 
 /** One-click example briefs for the first visit. Generic, built from the data vocabulary. */
-export const EXAMPLE_BRIEFS = [
-  "Senior React engineers in New York who are open to work",
-  "Data scientists with Python and SQL, 5+ years",
-  "Backend engineers in Austin who know Go or Rust",
-] as const
+export const EXAMPLE_BRIEFS: readonly ComposerSuggestion[] = [
+  { label: "Senior React engineers in New York who are open to work", icon: CodeIcon },
+  { label: "Data scientists with Python and SQL, 5+ years", icon: ChartNoAxesColumnIcon },
+  { label: "Backend engineers in Austin who know Go or Rust", icon: ServerIcon },
+]
 
 /** Rotating placeholder examples: short enough to fit on one line at 375px. */
 const PLACEHOLDERS = [
@@ -38,53 +41,62 @@ export function useRotatingExample(active: boolean): string {
   return PLACEHOLDERS[i]
 }
 
-/** First visit: what to type, plus one-click example briefs. */
-export function FirstVisit({ onExample, disabled }: { onExample: (brief: string) => void; disabled?: boolean }) {
-  return (
-    <EmptyState
-      icon={SearchIcon}
-      title="Describe who you're looking for"
-      description="Mention a role, level, skills, location, years of experience or past companies. We turn it into filters you can edit."
-      action={
-        <div className="flex flex-col items-stretch gap-2 sm:items-center">
-          {EXAMPLE_BRIEFS.map((brief) => (
-            <Button
-              key={brief}
-              variant="outline"
-              disabled={disabled}
-              onClick={() => onExample(brief)}
-              className="h-auto min-h-11 justify-start px-3 py-2 text-left whitespace-normal sm:min-h-9"
-            >
-              {brief}
-            </Button>
-          ))}
-        </div>
-      }
-    />
-  )
-}
-
 /**
- * Status line while a search runs. Briefs go through the model first, so the message moves from
- * "Understanding…" to "Finding people…"; edited filters skip the model.
+ * While a search runs: the pipeline steps (presentational, see ThinkingSteps) over cards shaped like the answer,
+ * so nothing jumps when the results land. Edited-filter runs skip the model's two steps.
  */
-export function PendingStatus({ usesModel }: { usesModel: boolean }) {
-  const [understanding, setUnderstanding] = useState(usesModel)
-  useEffect(() => {
-    if (!usesModel) return
-    const t = setTimeout(() => setUnderstanding(false), 1500)
-    return () => clearTimeout(t)
-  }, [usesModel])
-  return <>{understanding ? "Understanding your brief…" : "Finding people…"}</>
-}
-
-export function ResultsSkeleton({ chips = true }: { chips?: boolean }) {
+export function SearchThinking({ running, usesModel }: { running: boolean; usesModel: boolean }) {
+  const step = useThinkingSteps(running, usesModel)
   return (
     <div className="space-y-4">
-      {chips && <FilterChipsSkeleton />}
-      <CandidateListSkeleton rows={5} />
+      <ThinkingPanel>
+        <ThinkingSteps active={step ?? THINKING_STEPS.length} usesModel={usesModel} />
+      </ThinkingPanel>
+      <CandidateCardListSkeleton rows={4} />
     </div>
   )
+}
+
+/** Count line + list skeleton while a stored search loads (refresh, back/forward). */
+export function ResultsSkeleton() {
+  return (
+    <div className="space-y-3">
+      <div className="flex h-10 items-center justify-between">
+        <Skeleton className="h-4 w-40 rounded-full" />
+        <Skeleton className="h-8 w-28 rounded-full" />
+      </div>
+      <CandidateCardListSkeleton rows={5} />
+    </div>
+  )
+}
+
+/** The 16px card that frames empty and error states in place of the results. */
+export function StateCard({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl border border-border bg-card">{children}</div>
+}
+
+/** Plain-language copy for a search that didn't finish. 503 and 429 never use up a search (API contract). */
+export function runErrorCopy(error: unknown): { title: string; message: string } {
+  const status = error instanceof ApiError ? error.status : -1
+  if (status === 503) {
+    return {
+      title: "Search is taking a breather",
+      message: "We couldn't read your brief in time. Nothing was used from your plan, so just try again in a moment.",
+    }
+  }
+  if (status === 429) {
+    return {
+      title: "That was a lot of searches at once",
+      message: "Give it a few seconds, then try again. Nothing was used from your plan.",
+    }
+  }
+  if (status === 0) {
+    return { title: "You seem to be offline", message: "We couldn't reach the server. Check your connection and try again." }
+  }
+  return {
+    title: "Search didn't finish",
+    message: "Something went wrong on our side. Try again, and if it keeps happening, refresh the page.",
+  }
 }
 
 /**
@@ -109,10 +121,10 @@ export function ZeroResults({
     return (
       <EmptyState
         icon={SearchXIcon}
-        title="Part of your brief isn't in our data"
+        title="Part of your brief isn't something we can search"
         description={
           <>
-            We can&apos;t search by {quoteList(unsupported)}, so rather than guess we show no one.
+            Our candidate data doesn&apos;t include {quoteList(unsupported)}, so rather than guess, we show no one.
             {!searchable && " Add a role, skill or location to search for."}
           </>
         }
@@ -131,8 +143,8 @@ export function ZeroResults({
     return (
       <EmptyState
         icon={SearchXIcon}
-        title="Nothing in this brief we can search for"
-        description="Name a role, skill, location, level or company and we'll find matching people."
+        title="There's nothing here we can search for yet"
+        description="Try naming a role, a skill, a city, a seniority level or a past company."
       />
     )
   }
@@ -159,7 +171,7 @@ export function ZeroResults({
     <EmptyState
       icon={SearchXIcon}
       title="No one matches all of these filters"
-      description="Remove one to widen the search."
+      description="Remove one to widen the search. You can also edit any filter above."
       action={
         <div className="flex flex-wrap justify-center gap-2">
           {chips.map((c) => (

@@ -158,6 +158,8 @@ The brief input, styled like an LLM composer. It is controlled: the owner holds 
     `onSuggestion(brief)` fires on click.
 - **`variant="docked"`** (default; above results): a single-row box with the send button inside, ⌘K hint
   when empty, and auto-grow up to 160px.
+- **`meta`**: a quiet line under the box (centred in the hero, right-aligned when docked). The search page puts
+  `SearchQuota` here, so searches left always sit next to the composer.
 - **Keys:** Enter submits the trimmed brief, Shift+Enter adds a newline, Esc blurs. **⌘K / Ctrl+K and `/`**
   focus it (`globalShortcut`; exactly one composer per page owns it).
 - **States:**
@@ -200,7 +202,8 @@ One understood filter, as a pill: muted `label`, strong `value`, and a round × 
 - `disabled` dims the chip. Long values truncate (set `max-w-*`).
 - Removal is instant; the owner shows `toastUndo`. `AddFilterChip` is the dashed "+ Add filter" pill.
 - **`FilterChipList`** is a labelled group. `heading="Understood"` adds the "✦ Understood" line (what the
-  model read from the brief), and `onClear` adds a quiet "× Clear all". The loading state is
+  model read from the brief), and `onClear` adds a quiet "× Clear all". `listClassName` styles the chip row itself
+  (the search page makes it one horizontally scrolling row below `sm`). The loading state is
   `FilterChipsSkeleton` (pill-shaped).
 
 ### CandidateCard — `candidate-card.tsx`
@@ -215,8 +218,9 @@ One ranked result, laid out as:
 Behaviour:
 - The whole card opens the sheet: the name is a button stretched over the card. The shortlist control sits
   above it.
-- **The bookmark is revealed on hover/focus for fine pointers (`pointer-fine:`)** and is always visible on
-  touch. It also stays visible when shortlisted (`aria-pressed`), when its menu is open, or while pending.
+- **The shortlist control is always visible** (shortlisting is the main action on a result and must be obvious
+  at first glance): a "🔖 Shortlist" outline pill from `sm` up, a 44px round bookmark below `sm`. Shortlisted
+  (`aria-pressed`) turns it green-tinted with a filled bookmark and "Shortlisted".
 - States: default, hover / keyboard focus (`border-strong` + soft shadow), `selected` (open in the sheet:
   green border, tint and ring; `aria-current`), shortlisted, pending, avatar/logo fallback, truncation.
 - `appearance="card"` (default) is a standalone 12px card. Stack them in **`CandidateCardList`** (8px gap).
@@ -224,8 +228,9 @@ Behaviour:
 - `appearance="row"` is flat, for a hairline-divided **`CandidateList`** (shortlist pages, dense virtualised
   lists). `CandidateRow` / `CandidateRowSkeleton` / `CandidateList(Skeleton)` in `candidate-row.tsx` are
   this appearance and keep the old imports working.
-- `ShortlistIconButton`: a round bookmark, filled and tinted when on any list, spinner when pending. It forwards
-  its ref, so a Popover or Drawer trigger can wrap it.
+- `ShortlistIconButton`: that control. Labelled pill ≥ `sm`, round icon button below (the `aria-label` always
+  names the person), filled and tinted when on any list, spinner when pending. It forwards its ref, so a Popover or
+  Drawer trigger can wrap it.
 - `React.memo`: pass stable callbacks that take the id (`onOpen(id)`) and a stable `renderShortlist`.
 - Loading: `CandidateCardSkeleton` and `CandidateCardListSkeleton` (same shape, shimmer).
 - `matchedSkills` is computed from the search filters, never by the LLM.
@@ -305,10 +310,10 @@ Behaviour:
 
 ### AppShell / nav — `app-shell.tsx`
 - **≥ 768px:** a 240px warm sidebar (`surface` wash, hairline right edge).
-  - Brand: a green round mark with the name.
-  - Section labels are uppercase 12px.
+  - Brand: a green round mark with the name, at the top.
+  - Section labels are uppercase 12px. "Recent saved" lists the latest saved searches (click re-runs).
   - **Pill items** (36px). The active item is a raised card (white, soft shadow, hairline) with a green icon.
-  - The PlanBadge and ThemeToggle sit in the footer.
+  - The footer holds the PlanBadge and ThemeToggle, then (above a hairline) the company / account menu.
 - **< 768px:**
   - a translucent sticky top bar (`backdrop-blur-xl`, hairline)
   - a translucent 56px bottom tab bar where the active tab is green with a softly filled icon
@@ -330,16 +335,27 @@ Behaviour:
 1. **Empty state:** a `Composer variant="hero"` centred in the content column (vertically off-centre,
    ≈ 30% from the top), with `title` "Who are you looking for?", one line of sub-copy, and 3–4 example briefs
    as suggestions. Nothing else on the page.
-2. **Submit:** the composer becomes `variant="docked"` and sticks to the top of the column. Below it,
-   `ThinkingPanel` + `ThinkingSteps` (driven by `useThinkingSteps(isPending, usesModel)`) sit over
-   `FilterChipsSkeleton` + `CandidateCardListSkeleton`.
-3. **Response:** the panel is replaced by `FilterChipList heading="Understood" onClear` with chips
-   `animateIn` (40ms stagger). Then come the count line ("**128** candidates · best match first",
-   `aria-live`) and the cards fading up (60ms stagger, the first page only).
-4. **Edits:** editing or removing a chip re-runs with `usesModel=false`. Chips don't re-animate.
-5. **Empty / unsupported / error:** EmptyState or ErrorState inside a 16px card, in place of the cards.
+2. **Submit:** the composer becomes `variant="docked"`. The docked composer, the quota line and the filter
+   chips form one sticky header (below the mobile top bar; at the top from `md`), so the understood filters are
+   always visible and editable while results scroll. While the brief is read the chips are
+   `FilterChipsSkeleton`; below the header, `ThinkingPanel` + `ThinkingSteps` (driven by
+   `useThinkingSteps(isPending, usesModel)`) sit over `CandidateCardListSkeleton`.
+3. **Response:** the skeleton pills become `FilterChipList heading="Understood" onClear` with chips
+   `animateIn` (40ms stagger). Below the header: the model's one-line reading, then the count line
+   ("**128** candidates · best match first", `aria-live`) with the **Save search** outline pill on its right,
+   then the cards fading up (60ms stagger, the first page only, capped at 480ms).
+4. **Edits:** editing or removing a chip re-runs with `usesModel=false` (only "Finding people → Ranking" play).
+   Chips don't re-animate. **Clear all** returns to the empty hero composer (nothing runs or is consumed).
+5. **Empty / unsupported / error:** EmptyState or ErrorState inside a 16px card, in place of the cards. Search
+   errors are written for people: 503 "Search is taking a breather… nothing was used", 429, offline, other.
+6. **Quota:** the free plan's "✦ N free search left · Upgrade" sits under the composer (in the mobile docked
+   state the top bar's PlanBadge, directly above, carries it). A 402 opens the UpgradeDialog, never an error.
 
 `/dev/design#flow` is a working mock of this sequence.
+
+7. **Login:** the brand, a `text-4xl`/500 "Welcome back", the form in a 16px card with the composer shadow, and
+   the two demo accounts as one-click fill cards. From `lg` a still, decorative product glimpse sits beside it
+   (`LoginPreview`: composer, Understood chips, card shapes; `aria-hidden`, nothing animates or loops).
 
 ---
 

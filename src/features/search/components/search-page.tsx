@@ -6,7 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
-import { SearchBar } from "@/components/search-bar"
+import { Composer } from "@/components/composer"
+import { FilterChipsSkeleton } from "@/components/filter-chip"
 import { toast, toastUndo } from "@/components/toast"
 import { Button } from "@/components/ui/button"
 import { CandidateSheetContainer } from "@/features/people/components/candidate-sheet-container"
@@ -23,17 +24,30 @@ import { useRunSearch, useSearchPages } from "../hooks"
 import { useSearchUiStore } from "../store"
 import { SearchFilters } from "./search-filters"
 import { SearchResults } from "./search-results"
-import { FirstVisit, PendingStatus, ResultsSkeleton, useRotatingExample, ZeroResults } from "./search-states"
+import {
+  EXAMPLE_BRIEFS,
+  ResultsSkeleton,
+  runErrorCopy,
+  SearchThinking,
+  StateCard,
+  useRotatingExample,
+  ZeroResults,
+} from "./search-states"
 
 /** Rapid chip edits (toggling several values) collapse into one search. */
 const EDIT_DEBOUNCE_MS = 300
+
+/** How long the entrance (chips pop in, cards rise) stays armed after a new brief's results land. */
+const INTRO_MS = 1500
 
 /** Errors about the brief itself are shown under the field; everything else replaces the results. */
 const isInputError = (e: unknown) => e instanceof ApiError && (e.status === 400 || e.status === 422)
 
 /**
- * The search experience: brief → "We understood" chips → ranked, virtualized results. The current search
- * lives in the URL (`?s=<search_id>`) so refresh and back work; the snapshot is read from React Query.
+ * The search experience (docs/design.md §3): a centred hero composer on the first visit; after a submit the
+ * composer docks to the top, the thinking steps play, the "Understood" chips pop in and ranked cards rise in.
+ * The current search lives in the URL (`?s=<search_id>`) so refresh and back work; the snapshot is read from
+ * React Query.
  */
 export function SearchPage() {
   const router = useRouter()
@@ -68,6 +82,14 @@ export function SearchPage() {
   const filters = draft ?? current?.filters
   const matchedSkills = useMemo(() => matchedSkillsOf(current?.filters ?? {}), [current?.filters])
 
+  // The search whose entrance is playing: set when a new brief's results land, never for edits or reloads.
+  const [introId, setIntroId] = useState<string | null>(null)
+  useEffect(() => {
+    if (introId === null) return
+    const t = setTimeout(() => setIntroId(null), INTRO_MS)
+    return () => clearTimeout(t)
+  }, [introId])
+
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   /** The "Removed … · Undo" toast of the edit in flight; dismissed if that edit never ran. */
   const undoToast = useRef<string | number | undefined>(undefined)
@@ -78,6 +100,7 @@ export function SearchPage() {
       run.mutate(input, {
         onSuccess: (res) => {
           setDraft(null)
+          if (!input.filters) setIntroId(res.search_id)
           router.push(`${pathname}?s=${res.search_id}` as Route)
         },
         onError: (err) => {
@@ -138,6 +161,15 @@ export function SearchPage() {
     [filters, editFilters],
   )
 
+  /** "Clear all": back to the empty composer for a fresh brief (nothing is run or consumed). */
+  const startOver = useCallback(() => {
+    clearTimeout(timer.current)
+    setDraft(null)
+    setLastEdited(null)
+    setBrief("")
+    router.push(pathname as Route)
+  }, [router, pathname, setLastEdited])
+
   const { fetchNextPage } = pagesQuery
   // Never cancel a page already in flight: the list may ask again before `isFetchingNextPage` flips.
   const loadMore = useCallback(() => void fetchNextPage({ cancelRefetch: false }), [fetchNextPage])
@@ -146,60 +178,118 @@ export function SearchPage() {
   const runError = run.isError && !isInputError(run.error) && !(run.error instanceof ApiError && run.error.status === 402)
   const notFound = badId || (pagesQuery.error instanceof ApiError && pagesQuery.error.status === 404)
 
+  const hero = !searchId && !badId && !run.isPending && !runError
+  const inputError = run.isError && isInputError(run.error) ? run.error.message : null
+
+  if (hero) {
+    return (
+      // Off-centre (≈ 30% from the top), like an LLM tool's empty chat.
+      <div className="mx-auto flex w-full max-w-2xl flex-col px-4 pt-[10dvh] pb-12 sm:px-6 md:pt-[22dvh]">
+        <Composer
+          variant="hero"
+          title="Who are you looking for?"
+          description="Describe the person in plain English. We'll turn it into filters you can edit."
+          value={brief}
+          onChange={setBrief}
+          onSubmit={submitBrief}
+          error={inputError}
+          placeholder={`e.g. ${placeholder}`}
+          autoFocus={!raw}
+          suggestions={EXAMPLE_BRIEFS}
+          onSuggestion={submitBrief}
+          meta={<SearchQuota />}
+        />
+      </div>
+    )
+  }
+
+  const editing = run.isPending && Boolean(run.variables?.filters)
+  const intro = current !== undefined && current.search_id === introId
+
+  // Under the composer: the understood filters (skeleton pills while a new brief is being read).
+  let chips: React.ReactNode = null
+  if (run.isPending && !editing) {
+    chips = <FilterChipsSkeleton />
+  } else if (!notFound && !runError && filters && (editing || current)) {
+    chips = (
+      <SearchFilters
+        filters={filters}
+        onEdit={editFilters}
+        onRemove={removeChip}
+        onRemoveUnsupported={removeUnsupported}
+        onClear={startOver}
+        animateIn={intro && !draft}
+      />
+    )
+  }
+
   let body: React.ReactNode
   if (run.isPending) {
-    body = <ResultsSkeleton chips={!run.variables?.filters} />
+    body = <SearchThinking running usesModel={!editing} />
   } else if (runError) {
+    const copy = runErrorCopy(run.error)
     body = (
-      <ErrorState
-        title="Search didn't finish"
-        message={run.error.message}
-        onRetry={() => run.variables && start(run.variables)}
-      />
+      <StateCard>
+        <ErrorState title={copy.title} message={copy.message} onRetry={() => run.variables && start(run.variables)} />
+      </StateCard>
     )
   } else if (notFound) {
     body = (
-      <EmptyState
-        icon={SearchXIcon}
-        title="This search isn't available"
-        description="It may belong to another account, or the link is incomplete."
-        action={
-          <Button variant="outline" onClick={() => router.push(pathname as Route)}>
-            Start a new search
-          </Button>
-        }
-      />
+      <StateCard>
+        <EmptyState
+          icon={SearchXIcon}
+          title="This search isn't available"
+          description="It may belong to another account, or the link is incomplete."
+          action={
+            <Button variant="outline" onClick={startOver}>
+              Start a new search
+            </Button>
+          }
+        />
+      </StateCard>
     )
-  } else if (!searchId) {
-    body = <FirstVisit onExample={submitBrief} />
   } else if (pagesQuery.isPending) {
     body = <ResultsSkeleton />
   } else if (pagesQuery.isError && !current) {
     body = (
-      <ErrorState
-        title="Couldn't load this search"
-        message={pagesQuery.error.message}
-        onRetry={() => pagesQuery.refetch()}
-        retrying={pagesQuery.isFetching}
-      />
+      <StateCard>
+        <ErrorState
+          title="Couldn't load these results"
+          message="Your search is saved. Check your connection and try again."
+          onRetry={() => pagesQuery.refetch()}
+          retrying={pagesQuery.isFetching}
+        />
+      </StateCard>
     )
   } else if (current && filters) {
+    const total = current.total
     body = (
-      <div className="space-y-4">
-        <SearchFilters
-          filters={filters}
-          onEdit={editFilters}
-          onRemove={removeChip}
-          onRemoveUnsupported={removeUnsupported}
-        />
+      <>
         <Notes filters={current.filters} />
-        {current.total === 0 ? (
-          <ZeroResults
-            filters={current.filters}
-            lastEdited={lastEdited}
-            onRemove={removeChip}
-            onDropUnsupported={() => editFilters(withFilter(current.filters, "unsupported", []), null)}
-          />
+        <div className="mb-3 flex min-h-10 items-center justify-between gap-3">
+          <p aria-live="polite" className="min-w-0 px-1 text-sm text-muted-foreground tabular-nums">
+            {draft ? (
+              "Updating results…"
+            ) : (
+              <>
+                <span className="font-semibold text-foreground">{total.toLocaleString()}</span>{" "}
+                {total === 1 ? "candidate" : "candidates"}
+                {total > 1 && <span className="max-sm:hidden"> · best match first</span>}
+              </>
+            )}
+          </p>
+          {/* Saves what is on screen: the brief the results are for and the filters as edited (including a pending edit). */}
+          <SaveSearchButton brief={current.brief} filters={filters} />
+        </div>
+        {total === 0 ? (
+          <StateCard>
+            <ZeroResults
+              filters={current.filters}
+              lastEdited={lastEdited}
+              onRemove={removeChip}
+              onDropUnsupported={() => editFilters(withFilter(current.filters, "unsupported", []), null)}
+            />
+          </StateCard>
         ) : (
           <SearchResults
             results={results}
@@ -211,47 +301,32 @@ export function SearchPage() {
             selectedId={person.personId}
             onOpen={person.open}
             onPrefetch={prefetchPerson}
+            animateIntro={intro}
           />
         )}
-      </div>
+      </>
     )
   }
 
-  const total = current?.total
-  // Saves what is on screen: the brief the results are for and the filters as edited (including a pending edit).
-  const saveable = current !== undefined && !notFound && !run.isPending
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-10 sm:px-6">
       <h1 className="sr-only">Search candidates</h1>
-      {/* Sticky below the mobile top bar (h-14); at the top of the page from md up. */}
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pt-4 pb-3 sm:-mx-6 sm:px-6 md:top-0 md:pt-8">
-        <SearchBar
+      {/* The docked composer and the understood filters stay in view while the results scroll.
+          Sticky below the mobile top bar (h-14); at the top of the page from md up. */}
+      <div className="sticky top-14 z-20 -mx-4 bg-background/90 px-4 pt-3 pb-3 backdrop-blur-xl sm:-mx-6 sm:px-6 md:top-0 md:pt-6">
+        <Composer
           value={brief}
           onChange={setBrief}
           onSubmit={submitBrief}
           loading={run.isPending}
-          error={run.isError && isInputError(run.error) ? run.error.message : null}
+          error={inputError}
           placeholder={`e.g. ${placeholder}`}
-          autoFocus={!raw}
         />
-        <div className="mt-3 flex min-h-8 items-center justify-between gap-3">
-          <p aria-live="polite" className="min-w-0 px-1 text-sm text-muted-foreground tabular-nums">
-            {run.isPending ? (
-              <PendingStatus key={run.submittedAt} usesModel={!run.variables?.filters} />
-            ) : draft ? (
-              "Updating…"
-            ) : total !== undefined && !notFound ? (
-              `${total.toLocaleString()} ${total === 1 ? "person" : "people"}`
-            ) : null}
-          </p>
-          <div className="flex shrink-0 items-center gap-3">
-            {/* Below sm the plan badge sits in the top bar directly above, so the quota isn't repeated here. */}
-            <SearchQuota className="max-sm:hidden" />
-            <SaveSearchButton brief={saveable ? current.brief : undefined} filters={saveable ? filters : undefined} />
-          </div>
-        </div>
+        {/* Below sm the plan badge sits in the top bar directly above, so the quota isn't repeated here. */}
+        <SearchQuota className="mt-2.5 justify-end px-1 max-sm:hidden" />
+        {chips && <div className="mt-3">{chips}</div>}
       </div>
-      {body}
+      <div className="mt-2">{body}</div>
       <CandidateSheetContainer
         personId={person.personId}
         onClose={person.close}
@@ -274,5 +349,5 @@ function Notes({ filters }: { filters: Filters }) {
     filters.preferences?.length ? `Nice to have, not filtered: ${filters.preferences.join(", ")}.` : null,
   ].filter(Boolean)
   if (lines.length === 0) return null
-  return <p className="px-1 text-sm text-pretty text-muted-foreground">{lines.join(" · ")}</p>
+  return <p className="mb-1 px-1 text-sm text-pretty text-muted-foreground">{lines.join(" · ")}</p>
 }
