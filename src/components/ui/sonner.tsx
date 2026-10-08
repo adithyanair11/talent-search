@@ -17,11 +17,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      position="bottom-right"
+      // Keep toasts clear of the 56px mobile tab bar.
+      mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
+      toastOptions={{
+        classNames: {
+          toast: "!text-sm !font-sans !shadow-lg !gap-2",
+          description: "!text-muted-foreground",
+          actionButton: "!bg-primary !text-primary-foreground !rounded-md !font-medium",
+        },
+      }}
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
+        success: <CircleCheckIcon className="size-4 text-success" />,
         info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
+        warning: <TriangleAlertIcon className="size-4 text-warning" />,
+        error: <OctagonXIcon className="size-4 text-destructive" />,
         loading: <Loader2Icon className="size-4 animate-spin" />,
       }}
       style={

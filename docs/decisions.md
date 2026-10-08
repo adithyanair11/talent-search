@@ -80,3 +80,22 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
   searches, subscriptions and stripe_events, which no recruiter can write). Every attack runs with the acme
   recruiter's token or with no token. API cases are skipped until the routes exist (a non-JSON 404 means the
   route isn't implemented yet).
+
+## Design system
+
+- **Type scale replaces Tailwind's defaults** (`text-sm` = 13px, `text-base` = 14px body, `text-lg` = 16px)
+  instead of adding new names. shadcn primitives then render at product density without edits. Inputs and
+  textareas use `text-lg` below `md` so iOS Safari doesn't zoom on focus.
+- **`shadow-xs`/`shadow-sm` render nothing; `shadow-md+` all map to one overlay shadow.** This enforces
+  "hairline first, shadow only for overlays" without forking every shadcn component.
+- **shadcn's `--accent` stays a neutral hover surface.** The single brand hue is `--primary` (+ `--primary-subtle`
+  for selection). Renaming would break shadcn primitives, so the trap is documented in design.md instead.
+- **Company logos sit on a white tile in both themes.** The vendored logos are designed for light backgrounds.
+- **`/dev/design` stays reachable in production but is unlinked and `noindex`.** It renders only static
+  fixtures (four records copied from `data/candidates.json`), calls no APIs and has no secrets, so hiding it
+  behind a 404 would only make design review harder.
+- **No checkout CTA in UpgradeDialog.** Real checkout is out of scope and the Stripe API is never called. The
+  dialog explains the limit and says the plan updates automatically once the billing webhook confirms it.
+- **Sheet vs Drawer is chosen with `useSyncExternalStore(matchMedia)`.** It returns `false` on the server. That
+  is safe because the sheet only opens after user interaction. Persistent layout (sidebar vs tab bar) uses CSS
+  breakpoints, so the first paint is right.
