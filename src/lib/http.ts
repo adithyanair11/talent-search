@@ -12,6 +12,8 @@ export const ERROR_STATUS = {
   conflict: 409,
   unprocessable: 422,
   internal: 500,
+  /** A dependency (the LLM) is slow or down; nothing was consumed. Sent with `Retry-After`. */
+  search_unavailable: 503,
 } as const
 
 export type ErrorCode = keyof typeof ERROR_STATUS
@@ -22,23 +24,26 @@ export type ErrorBody = { error: { code: string; message: string } }
 export class HttpError extends Error {
   readonly code: ErrorCode
   readonly status: number
+  readonly retryAfterSeconds?: number
 
-  constructor(code: ErrorCode, message: string) {
+  constructor(code: ErrorCode, message: string, options: { retryAfterSeconds?: number } = {}) {
     super(message)
     this.name = 'HttpError'
     this.code = code
     this.status = ERROR_STATUS[code]
+    this.retryAfterSeconds = options.retryAfterSeconds
   }
 }
 
-export function errorResponse(code: ErrorCode, message: string): Response {
+export function errorResponse(code: ErrorCode, message: string, retryAfterSeconds?: number): Response {
   const body: ErrorBody = { error: { code, message } }
-  return Response.json(body, { status: ERROR_STATUS[code] })
+  const headers = retryAfterSeconds === undefined ? undefined : { 'Retry-After': String(retryAfterSeconds) }
+  return Response.json(body, { status: ERROR_STATUS[code], headers })
 }
 
 /** Maps any thrown value to a safe JSON error. Unknown errors are logged and become a generic 500. */
 export function toErrorResponse(err: unknown): Response {
-  if (err instanceof HttpError) return errorResponse(err.code, err.message)
+  if (err instanceof HttpError) return errorResponse(err.code, err.message, err.retryAfterSeconds)
   if (err instanceof ZodError) {
     const issue = err.issues[0]
     const where = issue?.path.length ? `${issue.path.join('.')}: ` : ''

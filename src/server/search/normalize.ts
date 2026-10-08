@@ -3,6 +3,7 @@ import 'server-only'
 import {
   filtersSchema,
   MAX_YEARS,
+  type Correction,
   type Extraction,
   type Filters,
 } from '@/lib/schemas/filters'
@@ -28,6 +29,8 @@ import {
   type State,
 } from '@/lib/vocabulary'
 
+import { NOT_TYPOS } from './not-typos'
+
 /**
  * Maps the LLM's free-text extraction onto the exact data vocabulary (docs/data-notes.md §2, §4).
  * Every raw value either lands in a canonical filter or becomes an `unsupported` note — nothing is dropped
@@ -47,7 +50,7 @@ export function key(value: string): string {
 type Lookup<T> = ReadonlyMap<string, readonly T[]>
 
 /** Canonical values map to themselves; aliases add more keys. A key may expand to several values. */
-function lookup<T extends string>(
+export function lookup<T extends string>(
   canonical: readonly T[],
   aliases: Record<string, T | readonly T[]> = {},
 ): Lookup<T> {
@@ -60,10 +63,87 @@ function lookup<T extends string>(
 }
 
 /** Exact key first, then the singular (a trailing "s" dropped) so "engineers" / "startups" match. */
-function resolve<T>(map: Lookup<T>, value: string): readonly T[] | undefined {
+function resolveExact<T>(map: Lookup<T>, value: string): readonly T[] | undefined {
   const k = key(value)
   if (!k) return undefined
   return map.get(k) ?? (k.length > 2 && k.endsWith('s') ? map.get(k.slice(0, -1)) : undefined)
+}
+
+/** Optimal-string-alignment distance (Levenshtein + adjacent transposition), stopping early above `max`. */
+export function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  let prev2: number[] = []
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    let best = i
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      let d = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d = Math.min(d, prev2[j - 2] + 1)
+      row.push(d)
+      best = Math.min(best, d)
+    }
+    if (best > max) return max + 1
+    prev2 = prev
+    prev = row
+  }
+  return prev[b.length]
+}
+
+/** Edits a typo may have: none under 5 characters (Go, R, Java, Rust, TS stay exact), 1 from 5, 2 from 9. */
+export function typoBudget(length: number): number {
+  return length >= 9 ? 2 : length >= 5 ? 1 : 0
+}
+
+/** Same values in the same order. */
+function sameTarget<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((t, i) => t === b[i])
+}
+
+/**
+ * Can `k` be a typo at all? At least 5 characters, and not a real English word or common term that merely
+ * looks like a vocabulary value ("shift" is not "Swift", "spare" is not "Spark") — see not-typos.ts.
+ */
+export function isTypoCandidate(k: string): boolean {
+  return k.length >= 5 && !NOT_TYPOS.has(k)
+}
+
+type FuzzyHit<T> = { target: readonly T[]; distance: number; ambiguous: boolean }
+
+/**
+ * The closest key of `map` within the typo budget of both words, with distance ≥ 1. Typos keep the first
+ * letter, so a different first letter is a different word ("QA engineer" is not an "ML engineer"), and a key
+ * that contains the other is a qualified value, not a typo ("Washington DC" is not "Washington"). `ambiguous`
+ * when two keys at the best distance mean different things.
+ */
+function fuzzyMatch<T>(map: Lookup<T>, k: string): FuzzyHit<T> | undefined {
+  if (!isTypoCandidate(k)) return undefined
+  let hit: FuzzyHit<T> | undefined
+  for (const [candidate, target] of map) {
+    const budget = Math.min(typoBudget(k.length), typoBudget(candidate.length))
+    if (budget === 0 || candidate[0] !== k[0] || candidate.includes(k) || k.includes(candidate)) continue
+    const distance = editDistance(k, candidate, budget)
+    if (distance > budget || (hit && distance > hit.distance)) continue
+    if (!hit || distance < hit.distance) hit = { target, distance, ambiguous: false }
+    else if (!sameTarget(hit.target, target)) hit.ambiguous = true
+  }
+  return hit
+}
+
+/** Typo fallback ("Pyhton", "Seatle"): the unambiguous closest value, or undefined. */
+export function resolveFuzzy<T>(map: Lookup<T>, value: string): readonly T[] | undefined {
+  const hit = fuzzyMatch(map, key(value))
+  return hit && !hit.ambiguous ? hit.target : undefined
+}
+
+/** Exact, then typo fallback. A typo correction is recorded on `out` so the recruiter can see it. */
+function resolve<T extends string>(map: Lookup<T>, value: string, out?: Collector): readonly T[] | undefined {
+  const exact = resolveExact(map, value)
+  if (exact) return exact
+  const fuzzy = resolveFuzzy(map, value)
+  if (fuzzy) out?.corrected(value, fuzzy)
+  return fuzzy
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -102,8 +182,10 @@ const ROLE_LOOKUP = lookup<Role>(ROLES, {
   'mobile dev': 'Mobile Engineer',
   'ios engineer': 'Mobile Engineer',
   'ios developer': 'Mobile Engineer',
+  'ios dev': 'Mobile Engineer',
   'android engineer': 'Mobile Engineer',
   'android developer': 'Mobile Engineer',
+  'android dev': 'Mobile Engineer',
   ae: 'Account Executive',
   'sales rep': 'Account Executive',
   'sales representative': 'Account Executive',
@@ -282,6 +364,20 @@ const FIELD_LOOKUP = lookup<FieldOfStudy>(FIELDS_OF_STUDY, {
 // Normalization
 // ---------------------------------------------------------------------------------------------------------
 
+/** A search that is only "engineers" (well over half the data) is not a brief: it would return near-everyone. */
+export const TOO_VAGUE_NOTE =
+  'the brief is too vague to search: "engineers" alone matches most of the data — add a role, skill, level, location or education'
+
+/** Preferences that name a vocabulary value are stored canonically, so the ranking boost can match them. */
+const PREFERENCE_LOOKUPS: readonly Lookup<string>[] = [
+  SKILL_LOOKUP,
+  SCHOOL_LOOKUP,
+  FIELD_LOOKUP,
+  COMPANY_LOOKUP,
+  COMPANY_TYPE_LOOKUP,
+  DEGREE_LOOKUP,
+]
+
 const MAX_NOTE = 200
 const MAX_NOTES = 10
 const MAX_LIST = 20
@@ -293,6 +389,14 @@ function clip(text: string, max: number): string {
 
 class Collector {
   readonly notes: string[] = []
+  readonly corrections: Correction[] = []
+
+  /** A misspelled value that was mapped to `to` — shown to the recruiter, e.g. "Android (corrected from Andriod)". */
+  corrected(from: string, to: readonly string[]): void {
+    const label = to === ENGINEERING_ROLES ? 'engineer' : to.join(' or ')
+    const c = { from: clip(from, 80), to: clip(label, 80) }
+    if (!this.corrections.some((x) => x.from === c.from && x.to === c.to)) this.corrections.push(c)
+  }
 
   unsupported(kind: string, value: string): void {
     this.note(`${kind} "${clip(value, 80)}" is not in the data`)
@@ -313,7 +417,7 @@ function cleanStrings(values: readonly string[] | null): string[] {
 }
 
 /** Resolve each value; unknown values become notes. Returns undefined when nothing mapped. */
-function mapList<T>(
+function mapList<T extends string>(
   values: readonly string[] | null,
   map: Lookup<T>,
   kind: string,
@@ -321,7 +425,7 @@ function mapList<T>(
 ): T[] | undefined {
   const result: T[] = []
   for (const value of cleanStrings(values)) {
-    const hit = resolve(map, value)
+    const hit = resolve(map, value, out)
     if (hit) result.push(...hit)
     else out.unsupported(kind, value)
   }
@@ -334,54 +438,73 @@ function mapList<T>(
  */
 const SKILL_ROLE_SUFFIXES = ['engineers', 'engineer', 'developers', 'developer', 'devs', 'dev']
 
-function splitSkillRole(value: string): Skill[] | undefined {
+function splitSkillRole(value: string, typo: { out: Collector } | undefined): Skill[] | undefined {
   const words = value.trim().split(/\s+/)
   if (words.length < 2) return undefined
   const last = words[words.length - 1].toLowerCase()
   if (!SKILL_ROLE_SUFFIXES.includes(last)) return undefined
-  return resolve(SKILL_LOOKUP, words.slice(0, -1).join(' '))?.slice()
+  const skill = words.slice(0, -1).join(' ')
+  if (!typo) return resolveExact(SKILL_LOOKUP, skill)?.slice()
+  const fuzzy = resolveFuzzy(SKILL_LOOKUP, skill)
+  if (fuzzy) typo.out.corrected(skill, fuzzy)
+  return fuzzy?.slice()
 }
 
 function normalizeRoles(
   values: readonly string[] | null,
   out: Collector,
-): { roles?: Role[]; skills: Skill[] } {
+): { roles?: Role[]; skills: Skill[]; generic: boolean } {
   const roles: Role[] = []
   const skills: Skill[] = []
+  let specific = false
   for (const value of cleanStrings(values)) {
-    const hit = resolve(ROLE_LOOKUP, value)
+    // Exact role, exact "<skill> engineer", then typos in the same order: the skill split runs before the role
+    // typo fallback so "Go engineer" never fuzzes into "ML engineer", and a misspelled role alias wins over a
+    // misspelled skill ("Andriod engineer" is a Mobile Engineer, like "Android engineer").
+    const exact = resolveExact(ROLE_LOOKUP, value)
+    const exactSkill = exact ? undefined : splitSkillRole(value, undefined)
+    const fuzzyRole = exact || exactSkill ? undefined : resolveFuzzy(ROLE_LOOKUP, value)
+    if (fuzzyRole) out.corrected(value, fuzzyRole)
+    const hit = exact ?? fuzzyRole
+    const skill = exactSkill ?? (hit ? undefined : splitSkillRole(value, { out }))
     if (hit) {
       roles.push(...hit)
+      // The generic alias targets are the ENGINEERING_ROLES array itself.
+      if (hit !== ENGINEERING_ROLES) specific = true
       continue
     }
-    const skill = splitSkillRole(value)
     if (skill) {
       roles.push(...ENGINEERING_ROLES)
       skills.push(...skill)
+      specific = true
       continue
     }
     out.unsupported('role', value)
   }
-  return { roles: roles.length ? uniq(roles) : undefined, skills }
+  return { roles: roles.length ? uniq(roles) : undefined, skills, generic: roles.length > 0 && !specific }
 }
 
 type Location = NonNullable<Filters['locations']>[number]
 
-function resolveLocation(place: string): Location | 'everywhere' | undefined {
+function resolveLocation(place: string, out: Collector): Location | 'everywhere' | undefined {
   if (WHOLE_DATASET_PLACES.has(key(place))) return 'everywhere'
-  const city = resolve(CITY_LOOKUP, place)
+  const city = resolveExact(CITY_LOOKUP, place)
   if (city) return { city: city[0] }
-  const state = resolve(STATE_LOOKUP, place)
+  const state = resolveExact(STATE_LOOKUP, place)
   if (state) return { state: state[0] }
+  const cityTypo = resolve(CITY_LOOKUP, place, out)
+  if (cityTypo) return { city: cityTypo[0] }
+  const stateTypo = resolve(STATE_LOOKUP, place, out)
+  if (stateTypo) return { state: stateTypo[0] }
   // "Austin, TX" / "Seattle, WA, USA": the city decides; a trailing state/country must agree with it.
   const parts = place.split(',').map((p) => p.trim()).filter(Boolean)
   if (parts.length > 1) {
-    const head = resolve(CITY_LOOKUP, parts[0])?.[0]
+    const head = resolve(CITY_LOOKUP, parts[0], out)?.[0]
     if (!head) return undefined
     const stateOfCity = CITIES.find((c) => c.city === head)?.state
     const consistent = parts.slice(1).every((p) => {
       if (WHOLE_DATASET_PLACES.has(key(p))) return true
-      return resolve(STATE_LOOKUP, p)?.[0] === stateOfCity
+      return resolve(STATE_LOOKUP, p, out)?.[0] === stateOfCity
     })
     return consistent ? { city: head } : undefined
   }
@@ -392,7 +515,7 @@ function normalizeLocations(values: readonly string[] | null, out: Collector): L
   const result: Location[] = []
   let everywhere = false
   for (const value of cleanStrings(values)) {
-    const hit = resolveLocation(value)
+    const hit = resolveLocation(value, out)
     if (hit === 'everywhere') everywhere = true
     else if (hit) result.push(hit)
     else out.unsupported('location', value)
@@ -407,6 +530,60 @@ function normalizeLocations(values: readonly string[] | null, out: Collector): L
     return true
   })
   return deduped.length ? deduped.slice(0, MAX_LIST) : undefined
+}
+
+/**
+ * The model sometimes comments on a hostile brief in `unsupported` ("SQL injection attempt in location field")
+ * although the prompt says not to. Such a note is about the input, not a requirement, so it is dropped. Only
+ * commentary-shaped phrases match; a requirement such as "SQL injection prevention" is kept.
+ */
+const INPUT_COMMENTARY =
+  /\b(injection|malicious|suspicious|hostile|manipulation)\b.*\b(attempts?|attempted|input|text|code|content|fragments?|detected|ignored|removed)\b|\b(attempts?|attempted|tried|trying) to (inject|manipulate|override|bypass)\b/i
+
+type Rescue =
+  | { kind: 'skill'; target: readonly Skill[] }
+  | { kind: 'city'; target: readonly City[] }
+  | { kind: 'state'; target: readonly State[] }
+  | { kind: 'role'; target: readonly Role[] }
+
+/** Where a model-reported `unsupported` item may be rescued to: skills, places and roles only. */
+const RESCUE_LOOKUPS = [
+  { kind: 'skill', map: SKILL_LOOKUP },
+  { kind: 'city', map: CITY_LOOKUP },
+  { kind: 'state', map: STATE_LOOKUP },
+  { kind: 'role', map: ROLE_LOOKUP },
+] as const
+
+/**
+ * The model sometimes reports a value as unsupported instead of putting it in its field — misspelled ("Andriod")
+ * or already corrected ("Android"). Such an item is rescued only when it is one or two words, is a typo candidate
+ * (≥ 5 characters, not an English word or known non-vocabulary term), and has exactly one match across all of
+ * skills, places and roles: an exact value, or else the closest within the typo budget. Anything else stays
+ * unsupported. `exact` rescues are not typos, so they are not shown as corrections.
+ */
+function rescueTypo(note: string): (Rescue & { exact: boolean }) | undefined {
+  if (note.trim().split(/\s+/).length > 2) return undefined
+  const k = key(note)
+  if (!isTypoCandidate(k)) return undefined
+  const exact = RESCUE_LOOKUPS.flatMap(({ kind, map }) => {
+    const target = resolveExact<string>(map, note)
+    return target ? [{ kind, target, exact: true }] : []
+  })
+  if (exact.length > 1) return undefined
+  if (exact.length === 1) return exact[0] as Rescue & { exact: boolean }
+  let best: (Rescue & { distance: number }) | undefined
+  let ambiguous = false
+  for (const { kind, map } of RESCUE_LOOKUPS) {
+    const hit = fuzzyMatch<string>(map, k)
+    if (!hit) continue
+    if (!best || hit.distance < best.distance) {
+      best = { kind, target: hit.target, distance: hit.distance } as Rescue & { distance: number }
+      ambiguous = hit.ambiguous
+    } else if (hit.distance === best.distance) {
+      ambiguous ||= hit.ambiguous || kind !== best.kind || !sameTarget<string>(hit.target, best.target)
+    }
+  }
+  return best && !ambiguous ? { ...best, exact: false } : undefined
 }
 
 function normalizeYears(
@@ -428,11 +605,39 @@ function normalizeYears(
 export function normalizeFilters(raw: Extraction): Filters {
   const out = new Collector()
 
-  const { roles, skills: roleSkills } = normalizeRoles(raw.roles, out)
+  const normalizedRoles = normalizeRoles(raw.roles, out)
+  let { roles, generic: genericRoles } = normalizedRoles
   const seniority = mapList(raw.seniority, SENIORITY_LOOKUP, 'level', out)
-  const locations = normalizeLocations(raw.locations, out)
+  let locations = normalizeLocations(raw.locations, out)
 
-  const skillsAll = uniq([...(mapList(raw.skills_all, SKILL_LOOKUP, 'skill', out) ?? []), ...roleSkills])
+  const skillsAll = uniq([...(mapList(raw.skills_all, SKILL_LOOKUP, 'skill', out) ?? []), ...normalizedRoles.skills])
+
+  // Misspelled values the model reported as unsupported become real filters (and a visible correction).
+  const notes: string[] = []
+  for (const note of cleanStrings(raw.unsupported)) {
+    if (INPUT_COMMENTARY.test(note)) continue
+    const rescue = rescueTypo(note)
+    if (!rescue) {
+      notes.push(note)
+      continue
+    }
+    if (!rescue.exact) out.corrected(note, rescue.target)
+    // As for "Android engineer": a skill whose "<skill> engineer" is a role alias names that role when the
+    // model only gave the generic engineer group.
+    const asRole =
+      rescue.kind === 'skill' && genericRoles ? resolveExact(ROLE_LOOKUP, `${rescue.target[0]} engineer`) : undefined
+    if (rescue.kind === 'role' || (asRole && asRole !== ENGINEERING_ROLES)) {
+      const rescued = rescue.kind === 'role' ? rescue.target : (asRole as readonly Role[])
+      roles = uniq(genericRoles ? [...rescued] : [...(roles ?? []), ...rescued])
+      genericRoles = genericRoles && rescued === ENGINEERING_ROLES
+    } else if (rescue.kind === 'skill') {
+      skillsAll.push(...rescue.target.filter((t) => !skillsAll.includes(t)))
+    } else {
+      const place: Location = rescue.kind === 'city' ? { city: rescue.target[0] } : { state: rescue.target[0] }
+      const known = (locations ?? []).some((l) => JSON.stringify(l) === JSON.stringify(place))
+      locations = known ? locations : [...(locations ?? []), place]
+    }
+  }
   let skillsAny = (mapList(raw.skills_any, SKILL_LOOKUP, 'skill', out) ?? []).filter(
     (s) => !skillsAll.includes(s),
   )
@@ -450,7 +655,7 @@ export function normalizeFilters(raw: Extraction): Filters {
 
   let companyType: Filters['company_type']
   if (raw.company_type && raw.company_type.value.trim()) {
-    const value = resolve(COMPANY_TYPE_LOOKUP, raw.company_type.value)
+    const value = resolve(COMPANY_TYPE_LOOKUP, raw.company_type.value, out)
     if (value) companyType = { value: value[0], scope: raw.company_type.scope }
     else out.unsupported('company type', raw.company_type.value)
   }
@@ -460,8 +665,21 @@ export function normalizeFilters(raw: Extraction): Filters {
   const fields = mapList(raw.fields_of_study, FIELD_LOOKUP, 'field of study', out)
   const years = normalizeYears(raw.years_experience, out)
 
-  for (const note of raw.unsupported) out.note(note)
-  const preferences = uniq(raw.preferences.map((p) => clip(p, MAX_NOTE)).filter(Boolean)).slice(0, MAX_NOTES)
+  for (const note of notes) out.note(note)
+  const preferences = uniq(
+    cleanStrings(raw.preferences).map((p) => {
+      for (const map of PREFERENCE_LOOKUPS) {
+        const hit = resolve(map, p, out)
+        if (hit?.length === 1) return hit[0]
+      }
+      return clip(p, MAX_NOTE)
+    }),
+  ).slice(0, MAX_NOTES)
+
+  const others: unknown[] = [seniority, years?.min, years?.max, locations, raw.open_to_work, companies, companyType]
+  const otherConstraint = [...others, degrees, schools, fields].some((v) => v !== undefined && v !== null)
+  const onlyGenericRoles = genericRoles && !otherConstraint && skillsAll.length === 0 && skillsAny.length === 0
+  if (onlyGenericRoles) out.note(TOO_VAGUE_NOTE)
 
   const interpretation = clip(raw.interpretation, 300)
 
@@ -479,6 +697,7 @@ export function normalizeFilters(raw: Extraction): Filters {
     ...(schools && { schools }),
     ...(fields && { fields_of_study: fields }),
     unsupported: out.notes.slice(0, MAX_NOTES),
+    ...(out.corrections.length > 0 && { corrections: out.corrections.slice(0, MAX_NOTES) }),
     ...(preferences.length > 0 && { preferences }),
     ...(interpretation && { interpretation }),
   })

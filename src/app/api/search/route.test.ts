@@ -1,6 +1,6 @@
 /**
  * Integration tests for POST /api/search and GET /api/search/{search_id} against local Supabase (skipped when it
- * isn't running). Every request sends `filters`, so no OpenAI call is made. Globex gets a fixture paid subscription;
+ * isn't running). Requests send `filters`, so no OpenAI call is made; the LLM failure test stubs the extractor. Globex gets a fixture paid subscription;
  * acme's counter is set with the admin client to exercise the free limit. Counters, fixtures and the searches
  * created here are restored / removed afterwards.
  */
@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { Database } from '@/lib/database.types'
+import { FilterExtractionError } from '@/server/llm/extract-filters'
 import { getSupabaseAdmin } from '@/server/supabase-admin'
 
 import { GET } from './[searchId]/route'
@@ -15,6 +16,13 @@ import { POST } from './route'
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ getAll: () => [], set: () => {} }),
+}))
+
+// Only the LLM call is stubbed; everything after it (run_search, quota, RLS) is real.
+const extractFiltersCached = vi.hoisted(() => vi.fn())
+vi.mock('@/server/llm/extract-filters', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/llm/extract-filters')>()),
+  extractFiltersCached,
 }))
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -172,6 +180,30 @@ describe.skipIf(!reachable)('/api/search (local Supabase)', () => {
     const blocked = await post(acme, { brief: `${TAG} free 2`, filters: BACKEND })
     expect(blocked.status).toBe(402)
     expect((await blocked.json()).error.code).toBe('payment_required')
+    expect(await used(acmeId)).toBe(1)
+  })
+
+  it.each([
+    ['timed out', new FilterExtractionError('model timed out', 'unavailable')],
+    ['returned garbage', new FilterExtractionError('model returned invalid JSON', 'invalid_output')],
+  ])('an LLM call that %s → 503 + Retry-After, and the free search is NOT consumed', async (_, error) => {
+    await setUsed(acmeId, 0)
+    extractFiltersCached.mockRejectedValueOnce(error)
+    const brief = `${TAG} llm down`
+    const res = await post(acme, { brief })
+    expect(res.status).toBe(503)
+    expect(res.headers.get('Retry-After')).toBe('2')
+    expect(await res.json()).toEqual({
+      error: { code: 'search_unavailable', message: 'Search is busy, please try again' },
+    })
+    expect(extractFiltersCached).toHaveBeenCalledWith(brief)
+    // Quota is only taken inside run_search, which never ran: the counter and the searches table are untouched.
+    expect(await used(acmeId)).toBe(0)
+    const { count } = await admin.from('searches').select('id', { count: 'exact', head: true }).eq('brief', brief)
+    expect(count).toBe(0)
+    // …so the free search is still available.
+    const ok = await post(acme, { brief: `${TAG} after llm down`, filters: BACKEND })
+    expect(ok.status).toBe(200)
     expect(await used(acmeId)).toBe(1)
   })
 })

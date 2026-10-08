@@ -361,6 +361,10 @@ Normalization guidance (general synonym tables, not per-query rules):
 "Never return everyone": if after normalization no supported constraint remains, or any material
 requirement landed in `unsupported`, return 0 results with the explanation.
 
+Added after tuning (docs/decisions.md "Search: tuning for generalization"): obvious typos of a vocabulary value
+map to it (bounded edit distance, never for words under 5 characters), and a brief whose only constraint is the
+generic "engineers" group (~60% of candidates) counts as too vague, so it returns 0 with an explanation.
+
 ---
 
 ## 5. Stripe events (`data/stripe-events.json`)

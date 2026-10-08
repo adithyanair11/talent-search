@@ -35,7 +35,8 @@ describe('extractionJsonSchema (OpenAI strict mode)', () => {
   it('has the same top-level keys as the zod extraction schema and the canonical filters', () => {
     const jsonKeys = Object.keys((extractionJsonSchema as { properties: Node }).properties).sort()
     expect(jsonKeys).toEqual(Object.keys(extractionSchema.shape).sort())
-    expect(jsonKeys).toEqual(Object.keys(filtersSchema.shape).sort())
+    // `corrections` is written by the normalizer, never by the model.
+    expect([...jsonKeys, 'corrections'].sort()).toEqual(Object.keys(filtersSchema.shape).sort())
   })
 
   it('EMPTY_EXTRACTION is a valid extraction', () => {

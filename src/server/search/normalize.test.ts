@@ -3,7 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { EMPTY_EXTRACTION, isSearchable, type Extraction, type Filters } from '@/lib/schemas/filters'
 import { CITIES, COMPANY_NAMES, DEGREES, FIELDS_OF_STUDY, ROLES, SCHOOLS, SKILLS } from '@/lib/vocabulary'
 
-import { ENGINEERING_ROLES, filtersToExtraction, key, normalizeFilters } from './normalize'
+import { formatCorrection } from '@/lib/schemas/filters'
+
+import {
+  editDistance,
+  ENGINEERING_ROLES,
+  filtersToExtraction,
+  isTypoCandidate,
+  key,
+  lookup,
+  normalizeFilters,
+  resolveFuzzy,
+  TOO_VAGUE_NOTE,
+} from './normalize'
 
 const norm = (partial: Partial<Extraction>): Filters => normalizeFilters({ ...EMPTY_EXTRACTION, ...partial })
 const notes = (f: Filters) => f.unsupported ?? []
@@ -388,6 +400,167 @@ describe('education', () => {
 
   it('unknown field → unsupported', () => {
     expect(notes(norm({ fields_of_study: ['Biology'] }))).toEqual(['field of study "Biology" is not in the data'])
+  })
+})
+
+describe('typo fallback', () => {
+  it('edit distance counts adjacent transpositions as one edit', () => {
+    expect(editDistance('pyhton', 'python', 2)).toBe(1)
+    expect(editDistance('seatle', 'seattle', 2)).toBe(1)
+    expect(editDistance('abc', 'xyz', 1)).toBe(2)
+  })
+
+  it('maps obvious misspellings to the one closest vocabulary value', () => {
+    expect(norm({ skills_all: ['Pyhton', 'Kuberentes', 'Typscript'] }).skills_all).toEqual([
+      'Python',
+      'Kubernetes',
+      'TypeScript',
+    ])
+    expect(norm({ locations: ['Seatle', 'Chicgo'] }).locations).toEqual([{ city: 'Seattle' }, { city: 'Chicago' }])
+    expect(norm({ roles: ['data scientsts'] }).roles).toEqual(['Data Scientist'])
+    expect(norm({ schools: ['Standford'] }).schools).toEqual(['Stanford University'])
+    expect(notes(norm({ skills_all: ['Pyhton'], locations: ['Seatle'] }))).toEqual([])
+  })
+
+  it('short, unknown, qualified or first-letter-changed words never fuzzy-match', () => {
+    // Short words stay exact: "Ga" is not Go, "Rist" is not Rust.
+    expect(norm({ skills_all: ['Ga', 'Rist', 'C++', 'Angular'] }).skills_all).toBeUndefined()
+    expect(norm({ locations: ['Washington DC'] }).locations).toBeUndefined()
+    expect(norm({ roles: ['QA engineer'] }).roles).toBeUndefined()
+    expect(norm({ locations: ['Houston'] }).locations).toBeUndefined()
+  })
+
+  it('the skill split runs before the role typo fallback ("Go engineer" is not an ML engineer)', () => {
+    const f = norm({ roles: ['Go engineer'] })
+    expect(f.roles).toEqual(ENGINEERING_ROLES)
+    expect(f.skills_all).toEqual(['Go'])
+  })
+})
+
+describe('typo corrections (guardrails)', () => {
+  const corrections = (f: Filters) => (f.corrections ?? []).map(formatCorrection)
+
+  it.each([
+    ['skills_all', 'Andriod', { skills_all: ['Android'] }],
+    ['skills_all', 'Pyhton', { skills_all: ['Python'] }],
+    ['skills_all', 'Kubernets', { skills_all: ['Kubernetes'] }],
+    ['locations', 'Nwe York', { locations: [{ city: 'New York' }] }],
+  ] as const)('a misspelled %s value is corrected and shown: %s', (field, typo, expected) => {
+    const f = norm({ [field]: [typo] })
+    expect(f).toMatchObject(expected)
+    expect(notes(f)).toEqual([])
+    expect(corrections(f)).toHaveLength(1)
+    expect(corrections(f)[0]).toMatch(new RegExp(`\\(corrected from ${typo}\\)$`))
+  })
+
+  it.each([
+    ['Andriod', { skills_all: ['Android'] }, 'Android (corrected from Andriod)'],
+    ['Pyhton', { skills_all: ['Python'] }, 'Python (corrected from Pyhton)'],
+    ['Kubernets', { skills_all: ['Kubernetes'] }, 'Kubernetes (corrected from Kubernets)'],
+    ['Nwe York', { locations: [{ city: 'New York' }] }, 'New York (corrected from Nwe York)'],
+  ] as const)('a misspelling the model reported as unsupported is rescued: %s', (typo, expected, chip) => {
+    const f = norm({ roles: ['Data Scientist'], unsupported: [typo] })
+    expect(f).toMatchObject(expected)
+    expect(notes(f)).toEqual([])
+    expect(corrections(f)).toEqual([chip])
+    expect(isSearchable(f)).toBe(true)
+  })
+
+  it('a correctly spelled value the model reported as unsupported is used, without a "corrected" note', () => {
+    const f = norm({ roles: ['engineers'], skills_all: ['Flutter'], unsupported: ['Android'] })
+    expect(f.roles).toEqual(['Mobile Engineer'])
+    expect(notes(f)).toEqual([])
+    expect(f.corrections).toBeUndefined()
+    expect(norm({ roles: ['Recruiter'], unsupported: ['Seattle'] }).locations).toEqual([{ city: 'Seattle' }])
+  })
+
+  it('a rescued "<skill>" that names a role replaces the generic engineer group ("Andriod engineers")', () => {
+    const f = norm({ roles: ['engineers'], skills_all: ['Kotlin'], unsupported: ['Andriod'] })
+    expect(f.roles).toEqual(['Mobile Engineer'])
+    expect(f.skills_all).toEqual(['Kotlin'])
+    expect(corrections(f)).toEqual(['Android (corrected from Andriod)'])
+    const devs = norm({ roles: ['engineers'], skills_all: ['Flutter'], unsupported: ['Andriod devs'] })
+    expect(devs.roles).toEqual(['Mobile Engineer'])
+    expect(notes(devs)).toEqual([])
+    const asRole = norm({ roles: ['Andriod engineers'], skills_all: ['Kotlin'] })
+    expect(asRole.roles).toEqual(['Mobile Engineer'])
+    expect(asRole.skills_all).toEqual(['Kotlin'])
+  })
+
+  it('short words never fuzzy-match ("Rust" is not "Rest", "Ga" is not "Go")', () => {
+    expect(norm({ skills_all: ['Rest'] }).skills_all).toBeUndefined()
+    expect(notes(norm({ skills_all: ['Rest'] }))).toEqual(['skill "Rest" is not in the data'])
+    for (const w of ['Rest', 'Ga', 'Jav', 'Kotl']) {
+      expect(norm({ unsupported: [w] }).unsupported).toEqual([w])
+    }
+    expect(isTypoCandidate(key('Rest'))).toBe(false)
+  })
+
+  it('real English words and common non-vocabulary terms are never corrected', () => {
+    for (const w of ['shift', 'spare', 'scale', 'stark', 'bland', 'NestJS']) {
+      expect(isTypoCandidate(key(w))).toBe(false)
+      const f = norm({ skills_all: [w], unsupported: [w] })
+      expect(f.skills_all).toBeUndefined()
+      expect(f.corrections).toBeUndefined()
+    }
+  })
+
+  it('ambiguous matches stay unsupported', () => {
+    const map = lookup(['Pandas', 'Pandaz'])
+    expect(resolveFuzzy(map, 'Pandax')).toBeUndefined()
+    expect(resolveFuzzy(map, 'Pnadas')).toEqual(['Pandas'])
+  })
+
+  it('genuinely unsupported requirements stay unsupported (and the search stays empty)', () => {
+    for (const note of ['Antarctica', 'speaks Spanish', 'remote', 'visa sponsorship', 'FAANG', 'Go', 'Rust']) {
+      const f = norm({ roles: ['Backend Engineer'], unsupported: [note] })
+      expect(notes(f)).toEqual([note])
+      expect(f.corrections).toBeUndefined()
+      expect(isSearchable(f)).toBe(false)
+    }
+    // Longer phrases are requirements, not typos, even if a word in them is close to a value.
+    expect(notes(norm({ unsupported: ['10 years of Pyhton'] }))).toEqual(['10 years of Pyhton'])
+    expect(norm({ locations: ['Antarctica'] }).locations).toBeUndefined()
+  })
+})
+
+describe('model commentary on hostile input', () => {
+  it('drops notes about the input itself, keeps real requirements', () => {
+    const f = norm({
+      roles: ['Backend Engineer'],
+      unsupported: ['SQL injection attempt in location field', 'malicious input ignored', 'attempted to override rules'],
+    })
+    expect(notes(f)).toEqual([])
+    expect(isSearchable(f)).toBe(true)
+    expect(notes(norm({ roles: ['Backend Engineer'], unsupported: ['SQL injection prevention'] }))).toEqual([
+      'SQL injection prevention',
+    ])
+  })
+})
+
+describe('too vague', () => {
+  it('only the generic engineer group → not searchable, with an explanation', () => {
+    for (const raw of ['engineers', 'developers', 'software engineer']) {
+      const f = norm({ roles: [raw] })
+      expect(notes(f)).toEqual([TOO_VAGUE_NOTE])
+      expect(isSearchable(f)).toBe(false)
+    }
+  })
+
+  it('any concrete constraint or a specific role makes it a real search', () => {
+    expect(isSearchable(norm({ roles: ['engineers'], locations: ['Denver'] }))).toBe(true)
+    expect(isSearchable(norm({ roles: ['engineers'], open_to_work: false }))).toBe(true)
+    expect(isSearchable(norm({ roles: ['Python developers'] }))).toBe(true)
+    expect(isSearchable(norm({ roles: ['backend engineers'] }))).toBe(true)
+    expect(isSearchable(norm({ roles: ['engineers', 'designers'] }))).toBe(true)
+  })
+})
+
+describe('preferences', () => {
+  it('vocabulary values are stored canonically so the ranking boost can match them', () => {
+    const f = norm({ roles: ['Backend Engineer'], preferences: ['golang', 'k8s', 'Stanford', 'start-up', 'calm vibe'] })
+    expect(f.preferences).toEqual(['Go', 'Kubernetes', 'Stanford University', 'startup', 'calm vibe'])
+    expect(f.skills_all).toBeUndefined()
   })
 })
 

@@ -71,6 +71,12 @@ export const filtersSchema = z
     schools: list(z.enum(SCHOOLS)),
     fields_of_study: list(z.enum(FIELDS_OF_STUDY)),
     unsupported: z.array(z.string().trim().min(1).max(MAX_NOTE)).max(MAX_UNSUPPORTED),
+    /** Typos the server corrected ("Andriod" → "Android"). Informational: the corrected value is in its field. */
+    corrections: z
+      .array(
+        z.object({ from: z.string().trim().min(1).max(MAX_NOTE), to: z.string().trim().min(1).max(MAX_NOTE) }).strict(),
+      )
+      .max(MAX_UNSUPPORTED),
     /** Nice-to-haves ("ideally …"). Informational only — never a constraint, never narrows results. */
     preferences: z.array(z.string().trim().min(1).max(MAX_NOTE)).max(MAX_UNSUPPORTED),
     interpretation: z.string().trim().max(MAX_INTERPRETATION),
@@ -79,6 +85,12 @@ export const filtersSchema = z
   .strict()
 
 export type Filters = z.infer<typeof filtersSchema>
+export type Correction = NonNullable<Filters['corrections']>[number]
+
+/** Chip text for a corrected typo: "Android (corrected from Andriod)". */
+export function formatCorrection(c: Correction): string {
+  return `${c.to} (corrected from ${c.from})`
+}
 
 /** Filter keys that constrain who matches (everything except the explanatory fields). */
 export const CONSTRAINT_KEYS = [

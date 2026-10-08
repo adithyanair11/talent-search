@@ -16,6 +16,18 @@ describe('http errors', () => {
     expect(await res.json()).toEqual({ error: { code: 'not_found', message: 'Shortlist not found' } })
   })
 
+  it('a busy dependency is a 503 with Retry-After, never a 500', async () => {
+    const res = toErrorResponse(
+      new HttpError('search_unavailable', 'Search is busy, please try again', { retryAfterSeconds: 2 }),
+    )
+    expect(res.status).toBe(503)
+    expect(res.headers.get('Retry-After')).toBe('2')
+    expect(await res.json()).toEqual({
+      error: { code: 'search_unavailable', message: 'Search is busy, please try again' },
+    })
+    expect(toErrorResponse(new HttpError('not_found', 'x')).headers.get('Retry-After')).toBeNull()
+  })
+
   it('maps ZodError to 400 with the first issue', async () => {
     const parsed = z.object({ brief: z.string().min(1) }).safeParse({ brief: '' })
     const res = toErrorResponse(parsed.error)

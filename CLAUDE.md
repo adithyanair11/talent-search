@@ -40,7 +40,8 @@ All routes except billing accept `Authorization: Bearer <supabase access token>`
 | `GET /api/plan` | `{ plan: "free" \| "paid", searches_remaining: number \| null }` (null when paid). |
 | `POST /api/billing/events` | Stripe webhook, no recruiter token. 400 bad signature, 200 otherwise (incl. repeats). |
 
-Errors: JSON `{ error: { code, message } }` with correct status (400/401/402/404/409/422/500). Never leak stack traces or SQL.
+Errors: JSON `{ error: { code, message } }` with correct status (400/401/402/404/409/422/500, and 503
+`search_unavailable` + `Retry-After` when the LLM is slow/down — nothing consumed). Never leak stack traces or SQL.
 
 ## Architecture
 
@@ -82,8 +83,8 @@ Route handlers only: authenticate, validate with zod, call one service, map erro
 
 ## Search rules
 
-1. Pipeline: brief → sanitize/cap → OpenAI structured output (strict JSON schema, temperature 0, ~2.5s
-   timeout) → zod validate → **normalize every value against the real data vocabulary** (docs/data-notes.md)
+1. Pipeline: brief → sanitize/cap → OpenAI structured output (strict JSON schema, temperature 0, hedged:
+   2nd call at 1.4 s, 4 s deadline, 1 h in-memory cache of extractions — docs/decisions.md) → zod validate → **normalize every value against the real data vocabulary** (docs/data-notes.md)
    → values that don't exist in the data become `unsupported` → `public.run_search(brief, filters)` →
    ranked id snapshot stored on the `searches` row → page 1 returned.
 2. `run_search` is one `security definer` transaction: atomically consumes quota (conditional UPDATE,

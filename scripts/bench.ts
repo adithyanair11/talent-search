@@ -1,7 +1,9 @@
 /**
  * Latency bench against the running app. Globex gets a fixture paid subscription for the run (restored after).
  *
- * - New search: POST /api/search with briefs from data/queries.json (the full LLM path). Target p95 < 3 s.
+ * - New search: POST /api/search with briefs from data/queries.json (the full LLM path). Target p95 < 3 s. Each
+ *   brief gets a unique `(ref …)` suffix so the extraction cache can't answer it — this measures the LLM.
+ * - Cached brief: the same briefs again, answered from the extraction cache (still a search: SQL runs).
  * - Paging: GET /api/search/{id}?page=N on random pages of a large snapshot. Target p95 < 300 ms.
  *
  * Warm-up requests are excluded. Numbers from `make dev` are pessimistic (dev compilation, no minification);
@@ -53,12 +55,18 @@ async function main(): Promise<void> {
     await api(globex.token, 'GET', `/api/search/${big.body.search_id}?page=1`)
     await api(globex.token, 'POST', '/api/search', { brief: briefs[0] })
 
-    const search: number[] = []
-    for (let i = 0; i < SEARCH_RUNS; i++) {
-      const res = await api(globex.token, 'POST', '/api/search', { brief: briefs[i % briefs.length] })
-      if (res.status !== 200) throw new Error(`search failed: ${res.status} ${JSON.stringify(res.body)}`)
-      search.push(res.ms)
+    const unique = Array.from({ length: SEARCH_RUNS }, (_, i) => `${briefs[i % briefs.length]} (ref ${TAG}-${i})`)
+    const timedSearches = async (list: string[]) => {
+      const ms: number[] = []
+      for (const brief of list) {
+        const res = await api(globex.token, 'POST', '/api/search', { brief })
+        if (res.status !== 200) throw new Error(`search failed: ${res.status} ${JSON.stringify(res.body)}`)
+        ms.push(res.ms)
+      }
+      return ms
     }
+    const search = await timedSearches(unique)
+    const cached = await timedSearches(unique)
 
     const paging: number[] = []
     for (let i = 0; i < PAGE_RUNS; i++) {
@@ -70,8 +78,9 @@ async function main(): Promise<void> {
 
     console.log(`Bench against ${process.env.API_BASE_URL ?? 'http://localhost:3000'} · snapshot of ${big.body.total} (${pages} pages)\n`)
     const searchOk = report('new search', search, TARGET.search)
+    const cachedOk = report('cached brief', cached, TARGET.search)
     const pageOk = report('paging', paging, TARGET.page)
-    return searchOk && pageOk
+    return searchOk && cachedOk && pageOk
   })
   process.exit(ok ? 0 : 1)
 }

@@ -9,6 +9,7 @@
  * through GET /api/search/{id} to collect every result id. Needs `make dev` running (or API_BASE_URL).
  *
  * Run with `npm run eval` (local Supabase running + seeded, the app running with OPENAI_API_KEY set).
+ * `npm run eval -- scripts/eval-extra.json` runs another brief file of the same shape (extra keys are ignored).
  * Exits 1 if any query errors.
  */
 import './lib/env'
@@ -59,12 +60,11 @@ async function main(): Promise<void> {
   requireEnv('NEXT_PUBLIC_SUPABASE_URL')
   requireEnv('SUPABASE_SECRET_KEY')
 
-  const queries = JSON.parse(
-    readFileSync(path.resolve(process.cwd(), 'data/queries.json'), 'utf8'),
-  ) as Query[]
+  const file = process.argv[2] ?? 'data/queries.json'
+  const queries = JSON.parse(readFileSync(path.resolve(process.cwd(), file), 'utf8')) as Query[]
   await requireServer()
   const globex = await signIn(RECRUITER.globex)
-  console.log(`Search eval — ${queries.length} briefs · model ${getModel()} · API ${API_BASE}\n`)
+  console.log(`Search eval — ${file} · ${queries.length} briefs · model ${getModel()} · API ${API_BASE}\n`)
 
   const scores: QueryScore[] = []
   const searchLatency: number[] = []

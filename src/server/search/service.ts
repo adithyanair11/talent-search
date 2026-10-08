@@ -6,7 +6,7 @@ import type { SearchPageResponse, SearchRequest, SearchResponse, SearchResult } 
 import type { Database } from '@/lib/database.types'
 
 import type { RequestContext } from '../auth'
-import { extractFilters, FilterExtractionError } from '../llm/extract-filters'
+import { extractFiltersCached, FilterExtractionError } from '../llm/extract-filters'
 import { getPlan } from '../plan'
 import { filtersToExtraction, normalizeFilters } from './normalize'
 
@@ -19,6 +19,8 @@ import { filtersToExtraction, normalizeFilters } from './normalize'
 type PageRow = Database['public']['Functions']['search_page']['Returns'][number]
 
 const QUOTA_MESSAGE = "You've used your free search. Upgrade to keep searching."
+export const BUSY_MESSAGE = 'Search is busy, please try again'
+export const BUSY_RETRY_AFTER_SECONDS = 2
 
 function toResult(row: PageRow): SearchResult {
   return {
@@ -39,7 +41,7 @@ function toResult(row: PageRow): SearchResult {
 async function resolveFilters(input: SearchRequest): Promise<Filters> {
   if (input.filters) return normalizeFilters(filtersToExtraction(input.filters))
   try {
-    const { raw } = await extractFilters(input.brief)
+    const { raw } = await extractFiltersCached(input.brief)
     return normalizeFilters(raw)
   } catch (err) {
     if (!(err instanceof FilterExtractionError)) throw err
@@ -47,7 +49,9 @@ async function resolveFilters(input: SearchRequest): Promise<Filters> {
     if (err.reason === 'refused') {
       throw new HttpError('unprocessable', "We couldn't interpret this brief. Try describing the people you want.")
     }
-    throw new HttpError('internal', "We couldn't interpret the brief right now. Please try again.")
+    // Timed out, unreachable or garbled: the model is the problem, not the request, and nothing was consumed
+    // (quota is only taken inside run_search, which never ran). A retry is likely to work.
+    throw new HttpError('search_unavailable', BUSY_MESSAGE, { retryAfterSeconds: BUSY_RETRY_AFTER_SECONDS })
   }
 }
 
