@@ -28,6 +28,8 @@ export type SearchResponse = {
 
 export type SearchPageResponse = {
   search_id: string
+  /** The brief this search ran for, so a reload can restore it and edited filters can re-run it. */
+  brief: string
   filters: Filters
   total: number
   page: number

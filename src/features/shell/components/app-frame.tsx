@@ -24,13 +24,13 @@ const UpgradeDialog = dynamic(() => import("@/components/upgrade-dialog").then((
 })
 
 const NAV: { href: Route; label: string; short: string; icon: React.ReactNode }[] = [
-  { href: "/", label: "Search", short: "Search", icon: <SearchIcon aria-hidden /> },
+  { href: "/search", label: "Search", short: "Search", icon: <SearchIcon aria-hidden /> },
   { href: "/shortlists", label: "Shortlists", short: "Shortlists", icon: <BookmarkIcon aria-hidden /> },
   { href: "/saved", label: "Saved searches", short: "Saved", icon: <HistoryIcon aria-hidden /> },
 ]
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 /** Plan badge wired to GET /api/plan, with loading (skeleton) and error (retry) states. */

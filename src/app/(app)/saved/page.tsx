@@ -16,7 +16,7 @@ export default function SavedSearchesPage() {
         description="Save a search to re-run it later with the same brief and filters."
         action={
           <Button asChild variant="outline">
-            <Link href="/">Start a search</Link>
+            <Link href="/search">Start a search</Link>
           </Button>
         }
       />

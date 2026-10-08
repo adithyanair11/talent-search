@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 type FilterChipProps = {
@@ -24,6 +25,8 @@ type FilterChipProps = {
   onRemove?: () => void
   /** The brief asked for this but the data can't express it — shown, never applied. */
   unsupported?: boolean
+  /** Short explanation shown on hover/focus of a read-only chip (e.g. why an unsupported term is ignored). */
+  hint?: string
   disabled?: boolean
   className?: string
 }
@@ -40,6 +43,7 @@ export const FilterChip = memo(function FilterChip({
   onOpenChange,
   onRemove,
   unsupported = false,
+  hint,
   disabled = false,
   className,
 }: FilterChipProps) {
@@ -81,6 +85,16 @@ export const FilterChip = memo(function FilterChip({
             {editor}
           </PopoverContent>
         </Popover>
+      ) : hint ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* Focusable so keyboard users get the hint too. */}
+            <span tabIndex={0} className="flex min-w-0 items-center gap-1.5 pr-2 pl-2.5 outline-none focus-visible:bg-accent">
+              {body}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{hint}</TooltipContent>
+        </Tooltip>
       ) : (
         <span className="flex min-w-0 items-center gap-1.5 pr-2 pl-2.5">{body}</span>
       )}
@@ -163,12 +177,15 @@ export function FilterChipOptions({
   options,
   selected,
   onToggle,
+  formatOption,
   placeholder = "Filter…",
   emptyText = "No matching values",
 }: {
   options: readonly string[]
   selected: readonly string[]
   onToggle: (value: string) => void
+  /** Display text for an option when it differs from the value (e.g. "senior" → "Senior"). */
+  formatOption?: (value: string) => string
   placeholder?: string
   emptyText?: string
 }) {
@@ -180,8 +197,9 @@ export function FilterChipOptions({
         <CommandGroup>
           {options.map((o) => {
             const on = selected.includes(o)
+            const text = formatOption ? formatOption(o) : o
             return (
-              <CommandItem key={o} value={o} onSelect={() => onToggle(o)} className="gap-2">
+              <CommandItem key={o} value={text} onSelect={() => onToggle(o)} className="gap-2">
                 <span
                   aria-hidden
                   className={cn(
@@ -191,7 +209,7 @@ export function FilterChipOptions({
                 >
                   {on && <CheckIcon className="size-3 text-current" />}
                 </span>
-                {o}
+                {text}
               </CommandItem>
             )
           })}

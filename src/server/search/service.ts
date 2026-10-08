@@ -94,7 +94,7 @@ export async function getSearchPage(
   page: number,
 ): Promise<SearchPageResponse> {
   const [search, results] = await Promise.all([
-    ctx.supabase.from('searches').select('id, filters, total').eq('id', searchId).maybeSingle(),
+    ctx.supabase.from('searches').select('id, brief, filters, total').eq('id', searchId).maybeSingle(),
     fetchPage(ctx, searchId, page),
   ])
   if (search.error) throw new Error(`search read failed: ${search.error.message}`)
@@ -104,6 +104,7 @@ export async function getSearchPage(
   const filters = filtersSchema.safeParse(search.data.filters)
   return {
     search_id: search.data.id,
+    brief: search.data.brief,
     filters: filters.success ? filters.data : {},
     total: search.data.total,
     page,

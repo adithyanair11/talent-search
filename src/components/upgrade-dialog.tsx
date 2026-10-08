@@ -69,7 +69,8 @@ export function UpgradeDialog({
   )
   const note = (
     <p className="text-sm text-muted-foreground">
-      Ask your workspace admin to upgrade. Your plan updates here automatically once billing confirms.
+      Upgrading means starting a Stripe subscription for your company. There&apos;s no checkout in this demo: your
+      plan switches to paid here automatically once Stripe confirms an active subscription.
     </p>
   )
   const close = (

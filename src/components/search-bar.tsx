@@ -56,6 +56,11 @@ export function SearchBar({
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // Empty: one line, so a long (or rotating) placeholder never changes the bar's height.
+    if (!value) {
+      el.style.height = ""
+      return
+    }
     el.style.height = "auto"
     el.style.height = `${el.scrollHeight}px`
   }, [value])

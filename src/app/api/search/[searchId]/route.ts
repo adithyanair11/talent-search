@@ -5,7 +5,7 @@ import { handleRouteError } from '@/server/route-error'
 import { getSearchPage } from '@/server/search/service'
 
 /**
- * `GET /api/search/{search_id}?page=N` → `{ search_id, filters, total, page, results }` from the stored snapshot.
+ * `GET /api/search/{search_id}?page=N` → `{ search_id, brief, filters, total, page, results }` from the stored snapshot.
  * Never counts as a search. A page past the end returns `results: []`.
  */
 export async function GET(

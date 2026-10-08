@@ -19,7 +19,7 @@ const MESSAGES: Record<SignInError, string> = {
 /** Only same-origin paths, never `//host` or `/\host` (open-redirect guard). */
 function safeNext(): Route {
   const next = new URLSearchParams(window.location.search).get("next")
-  return (next && /^\/(?![/\\])/.test(next) ? next : "/") as Route
+  return (next && /^\/(?![/\\])/.test(next) ? next : "/search") as Route
 }
 
 export function LoginForm() {

@@ -16,7 +16,7 @@ export default function ShortlistsPage() {
         description="Shortlist candidates from your search results to keep track of them here."
         action={
           <Button asChild variant="outline">
-            <Link href="/">Find candidates</Link>
+            <Link href="/search">Find candidates</Link>
           </Button>
         }
       />

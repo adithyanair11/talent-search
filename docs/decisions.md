@@ -338,3 +338,26 @@ expected sets don't depend on the code under test.
   A requirement such as "SQL injection prevention" is kept. An injected-SQL few-shot example was tried first and
   reverted: it fixed that brief but made the model flag stray words ("based") on two others.
 
+
+## Search UI (`/search`)
+
+- **`/search` is home.** `/` redirects there, login defaults to it, nav links point at it.
+- **The current search lives in the URL (`?s=<search_id>`)**, so refresh, Back and shared links work. A new search
+  `router.push`es, so each one is a history entry. Page 1 from the POST response seeds the React Query snapshot
+  cache, so the URL change renders without a second request.
+- **`GET /api/search/{id}` also returns `brief`.** This field is additive (the contract table fixes the POST shape;
+  GET has no listed shape). Without it a reloaded `?s=` page could not show the brief or re-run edited filters,
+  because `POST /api/search` requires `brief`.
+- **Chip edits re-run with `{ brief, filters }` after 300 ms of quiet.** Several toggles in one popover cost one
+  search. Each edit is a new search, so on the free plan it hits the 402 and opens the UpgradeDialog, and the chips
+  revert. The model's `interpretation` is dropped from edited filters because it describes the original brief.
+- **Chip editors keep at least one value.** Unchecking the last value would unmount the chip and close its popover
+  mid-edit, so removal is the chip's ×, which comes with Undo.
+- **Zero results name a cause without extra queries.** The order is: an `unsupported` term (offer "Search without
+  it"), then nothing searchable, then the filter the recruiter just changed (offer to remove it), then otherwise one
+  remove-button per filter. Per-filter counts would need N more searches, which would cost quota, so the UI does
+  not compute them.
+- **Infinite paging calls `fetchNextPage({ cancelRefetch: false })`.** The virtualizer can ask again before
+  `isFetchingNextPage` flips, and the default cancels and re-sends the page in flight.
+- **Row click only highlights the row for now** (`selectedId` in the search UI store). The candidate sheet arrives
+  with `GET /api/people/{id}`. Shortlisting from rows arrives with the shortlists feature.
