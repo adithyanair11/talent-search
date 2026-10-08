@@ -29,3 +29,15 @@ Non-obvious choices, newest last. Feeds the README.
   `package.json`; the Supabase CLI package needs none.
 - **Unimplemented scripts** (`eval`, `replay:stripe`, `probe:security`, `test:quota`, `bench`, `seed`) are stubs
   that exit 0 so `make setup` and the npm scripts work before each feature lands.
+
+## Search semantics (from data analysis)
+
+Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `expected_ids` with precision and recall
+1.000, and the alternatives were measured and rejected.
+
+- **Seniority words are exact levels** (`seniority` field): "senior" excludes staff (senior-or-above gives P 0.40).
+- **"Has worked at a startup/company" = any experience**, current or past (current-only gives R 0.90).
+- **Skills match exact canonical names, several skills are ANDed** ("React" never matches "React Native"; OR gives P 0.20).
+- **"Enterprise sales experience" is the skill `Enterprise Sales`**, not `company_type = enterprise` (P 0.71, R 0.68).
+- **A place name is a city**; only an explicit state name/code filters by state ("San Francisco" ≠ CA).
+- **A material requirement the data can't express (e.g. spoken languages) yields 0 results** with an `unsupported` note.
