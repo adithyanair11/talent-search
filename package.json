@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "eval": "tsx --conditions=react-server scripts/eval-search.ts",
-    "replay:stripe": "tsx scripts/replay-stripe.ts",
+    "replay:stripe": "tsx --conditions=react-server scripts/replay-stripe.ts",
     "probe:security": "tsx --conditions=react-server scripts/probe-security.ts",
     "test:quota": "tsx --conditions=react-server scripts/test-quota.ts",
     "bench": "tsx --conditions=react-server scripts/bench.ts",

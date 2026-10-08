@@ -194,7 +194,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "run_search":
+            "apply_stripe_event":
+{ Args: { "event": Json }; Returns: string
+                           },
+"run_search":
 { Args: { "p_brief": string,"p_filters": Json }; Returns: {
               "search_id": string,"searches_remaining": number,"total": number
             }[]

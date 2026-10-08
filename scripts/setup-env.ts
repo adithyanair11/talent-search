@@ -3,11 +3,13 @@
  *
  * - Supabase URL + publishable key + secret key always come from the CLI (safe to re-run).
  * - OPENAI_API_KEY / STRIPE_WEBHOOK_SECRET / OPENAI_MODEL are taken from the shell when set,
- *   otherwise kept from an existing .env.local, otherwise omitted.
+ *   otherwise kept from an existing .env.local, otherwise omitted. STRIPE_WEBHOOK_SECRET is the exception: with
+ *   no value anywhere, a random local one is generated so the webhook and `replay:stripe` work with no manual step.
  * - Next.js gives real environment variables precedence over .env.local at runtime.
  * - Never prints values, only variable names.
  */
 import { execFileSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -61,6 +63,10 @@ const values: Record<string, string> = {
 for (const name of PASS_THROUGH) {
   const value = process.env[name] || previous[name]
   if (value) values[name] = value
+}
+if (!values.STRIPE_WEBHOOK_SECRET) {
+  values.STRIPE_WEBHOOK_SECRET = `whsec_local_${randomBytes(24).toString('hex')}`
+  console.log('  Generated a local STRIPE_WEBHOOK_SECRET (export your own to override).')
 }
 
 const body = [

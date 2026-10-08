@@ -27,8 +27,8 @@ const COPY = {
       "The free plan includes one search per company. Results you already have, shortlists and saved searches stay available.",
   },
   manual: {
-    title: "Upgrade to search without limits",
-    description: "The free plan includes one search per company. Paid plans remove the limit.",
+    title: "Upgrade to Pro",
+    description: "The free plan includes one search per company. Pro removes the limit.",
   },
 } as const
 
@@ -69,8 +69,8 @@ export function UpgradeDialog({
   )
   const note = (
     <p className="text-sm text-muted-foreground">
-      Upgrading means starting a Stripe subscription for your company. There&apos;s no checkout in this demo: your
-      plan switches to paid here automatically once Stripe confirms an active subscription.
+      Pro means your company has an active Stripe subscription. There&apos;s no checkout in this demo: your plan
+      switches to Pro here automatically once Stripe confirms the subscription to our billing webhook.
     </p>
   )
   const close = (

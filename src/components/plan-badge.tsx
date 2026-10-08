@@ -7,14 +7,14 @@ import { cn } from "@/lib/utils"
 export type Plan = { plan: "free" | "paid"; searches_remaining: number | null }
 
 function label({ plan, searches_remaining }: Plan): React.ReactNode {
-  if (plan === "paid") return "Paid"
+  if (plan === "paid") return "Pro"
   const n = searches_remaining ?? 0
-  if (n === 0) return "No searches left"
-  // "free" is dropped on narrow screens to fit the mobile top bar.
+  if (n === 0) return "Free · 0 left"
+  // "search(es)" is dropped on narrow screens to fit the mobile top bar.
   return (
     <>
-      {n}
-      <span className="max-sm:hidden"> free</span> search{n === 1 ? "" : "es"} left
+      Free · {n}
+      <span className="max-sm:hidden"> search{n === 1 ? "" : "es"}</span> left
     </>
   )
 }
@@ -47,7 +47,7 @@ export function PlanBadge({
     return (
       <span className={base} aria-live="polite">
         {plan.plan === "paid" && <SparklesIcon aria-hidden className="size-3" />}
-        {label(plan)}
+        <span>{label(plan)}</span>
       </span>
     )
   }
@@ -60,7 +60,7 @@ export function PlanBadge({
       className={cn(base, "outline-none transition-colors hover:border-border-strong hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50")}
     >
       <span className={cn("size-1.5 rounded-full", exhausted ? "bg-warning" : "bg-muted-foreground/50")} aria-hidden />
-      {label(plan)}
+      <span>{label(plan)}</span>
       <span className="text-primary">· Upgrade</span>
     </button>
   )

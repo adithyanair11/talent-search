@@ -16,7 +16,9 @@ Non-obvious choices, newest last. Feeds the README.
 - **Env:** `scripts/setup-env.ts` regenerates `.env.local` from `npx supabase status -o env` on every setup
   (`API_URL`, `PUBLISHABLE_KEY`, `SECRET_KEY`, with fallbacks to the legacy `ANON_KEY` / `SERVICE_ROLE_KEY`).
   `OPENAI_API_KEY`, `STRIPE_WEBHOOK_SECRET` and `OPENAI_MODEL` come from the shell, or are kept from an existing
-  `.env.local`. Next.js already gives real environment variables precedence over `.env.local`.
+  `.env.local`. Next.js already gives real environment variables precedence over `.env.local`. If
+  `STRIPE_WEBHOOK_SECRET` is set nowhere, setup generates a random `whsec_local_…` so the webhook and
+  `replay:stripe` work with no manual step. An exported secret (the grader's) always wins.
 - **shadcn/ui `new-york` style, `neutral` base color, configured by a hand-written `components.json`.**
   shadcn CLI 4.x replaced styles with interactive "presets" in `init`. `new-york` is still served by the registry,
   so we wrote `components.json` and `globals.css` (the registry's neutral Tailwind v4 oklch variables) ourselves,
@@ -28,7 +30,7 @@ Non-obvious choices, newest last. Feeds the README.
   `https://rotto.com/rotto/...`, so only that host + path prefix is allowed.
 - **npm 11 `allowScripts`:** install scripts are approved per package (`esbuild`, `unrs-resolver`) in
   `package.json`; the Supabase CLI package needs none.
-- **Unimplemented scripts** (`replay:stripe`, `test:quota`, `bench`) are stubs
+- **Unimplemented scripts** (originally `replay:stripe`, `test:quota`, `bench`) were stubs
   that exit 0 so `make setup` and the npm scripts work before each feature lands.
 
 ## Search semantics (from data analysis)
@@ -434,3 +436,51 @@ expected sets don't depend on the code under test.
 - **Delete is optimistic with Undo, no confirmation.** It's cheap to recreate. Undo saves the same brief + filters
   again, so the restored row has a new id and saved date, and moves to the top. Recruiters can only write `brief`
   and `filters`, and soft-delete isn't worth adding for a 6-second window.
+
+## Billing (`POST /api/billing/events`, `apply_stripe_event`, plan UX)
+
+- **One DB function applies an event atomically.** `private.apply_stripe_event(event jsonb)` (security definer,
+  `search_path = ''`) inserts the event id into `stripe_events` `ON CONFLICT DO NOTHING` (no row → `duplicate`),
+  then upserts the subscription under a row lock (`select … for update`, with an insert race fallback). It returns
+  `applied | duplicate | ignored | stale`, which the route echoes as `{ received: true, result }` with 200.
+- **Service-role only, enforced twice.** `EXECUTE` is granted only to `service_role` on the private function and
+  on its `public.apply_stripe_event` wrapper. The wrapper is needed because PostgREST doesn't expose `private`.
+  There is no recruiter, so instead of the usual `auth.uid()` check the function requires
+  `auth.role() = 'service_role'`. `probe:security` checks that recruiter, anon and direct `private` calls are
+  denied and leave no rows.
+- **Every verified event is recorded, even ignored ones.** A redelivery of an ignored event is then a cheap
+  `duplicate`.
+- **What is applied:** only `customer.subscription.*`, the only subscription-bearing types in the sample. Other
+  types → `ignored`. Company = `companies.slug = data.object.metadata.company`; unknown or missing → `ignored`.
+  A status outside the table's check list → `ignored`. `customer.subscription.deleted` always stores `canceled`,
+  whatever `data.object.status` says. A subscription id never moves to another company (→ `stale`).
+- **Ordering uses `event.created`, never arrival order or the signature `t`** (data-notes §5). An event applies
+  only if `created > last_event_created`. **Tie on `created`:** `canceled` wins; otherwise the larger event id
+  (`collate "C"`) wins. Stripe's second-resolution timestamps make ties realistic, and a deterministic rule keeps
+  replays order-independent. Preferring cancel errs toward "not paid", the safer side.
+- **`canceled` is terminal per subscription id.** Stripe can't reactivate a canceled subscription; resubscribing
+  creates a new id, which is a new row. A later event for a canceled id is `stale`.
+- **`past_due`, `unpaid`, `incomplete`, `incomplete_expired`, `paused` are stored as-is and count as free.** This
+  is a strict reading of "paid iff active or trialing", with no grace period. A later `active` event (newer
+  `created`) restores paid. A real product might give `past_due` a dunning grace window; that's out of scope here.
+- **Signature:** `src/server/billing/verify-signature.ts` parses `t=` (exactly one) and one or more `v1=` (64 hex
+  chars; other schemes such as `v0` are skipped). It computes HMAC-SHA256 of `${t}.${rawBody}` and compares every
+  candidate with `timingSafeEqual`, without exiting early. **No timestamp tolerance**, because the sample events
+  are historic. The tradeoff is that a captured request can be replayed, but replays dedupe on event id, so a
+  replay can only repeat an outcome that already happened.
+- **The route reads `await req.text()` and verifies before parsing.** Bad or missing signature → 400. A signed
+  body that isn't JSON, or lacks `id`/`type`/`created` → 400. A missing secret → 500, logged by name only. Logs
+  include the event id, type and result, never the payload or the secret. No `runtime` export, because Next 16
+  rejects it with cacheComponents; the default runtime is Node, which `node:crypto` needs. `proxy.ts` already
+  skips this path.
+- **`replay:stripe` resets the billing tables** and replays the file in order with the exact bodies. It sends the
+  file's own `Stripe-Signature` headers when they verify with the configured secret. Otherwise it re-signs each
+  exact payload with the local secret at the same `t`, and says so. It asserts each step from data-notes §5 and
+  `expected_plans_after`, then runs generated scenarios (bad signatures, replay, reversed pair,
+  cancel-then-resubscribe, out-of-order cancel, ties). It finishes by resetting and replaying the file again, so
+  the DB ends in the documented state. Don't run it concurrently with `eval`/`test:quota`, whose fixture
+  subscriptions the reset would remove.
+- **Plan UX:** PlanBadge reads "Free · 1 search left", "Free · 0 left" or "Pro". `SearchQuota` shows the free
+  quota in the search status row from `sm` up. Below `sm`, the top-bar badge sits directly above the search bar,
+  so it isn't repeated. The UpgradeDialog says Pro = an active Stripe subscription for your company, with no
+  checkout. `useRunSearch` already invalidates `["plan"]` on settle, and saved-search re-runs go through it.

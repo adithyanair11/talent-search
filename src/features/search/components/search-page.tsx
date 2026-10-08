@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { CandidateSheetContainer } from "@/features/people/components/candidate-sheet-container"
 import { usePrefetchPerson } from "@/features/people/hooks"
 import { usePersonParam } from "@/features/people/use-person-param"
+import { SearchQuota } from "@/features/plan/components/search-quota"
 import { useUpgradeStore } from "@/features/plan/store"
 import { SaveSearchButton } from "@/features/saved-briefs/components/save-search-button"
 import { ApiError } from "@/lib/api-client"
@@ -243,7 +244,11 @@ export function SearchPage() {
               `${total.toLocaleString()} ${total === 1 ? "person" : "people"}`
             ) : null}
           </p>
-          <SaveSearchButton brief={saveable ? current.brief : undefined} filters={saveable ? filters : undefined} />
+          <div className="flex shrink-0 items-center gap-3">
+            {/* Below sm the plan badge sits in the top bar directly above, so the quota isn't repeated here. */}
+            <SearchQuota className="max-sm:hidden" />
+            <SaveSearchButton brief={saveable ? current.brief : undefined} filters={saveable ? filters : undefined} />
+          </div>
         </div>
       </div>
       {body}

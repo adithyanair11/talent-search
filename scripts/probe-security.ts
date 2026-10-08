@@ -266,6 +266,25 @@ async function main(): Promise<void> {
     await blocked('rpc', 'anon search_page(globex search)', anon.rpc('search_page', { p_search_id: gSearch.id, p_page: 1 }))
     await blocked('rpc', 'jsonb_text_array (private helper)', a.rpc('jsonb_text_array' as never, { arr: [] } as never))
 
+    // ---- billing: only the service role may apply Stripe events ---------------------------------------
+    const forged = {
+      id: `evt_${TAG}_forged`,
+      type: 'customer.subscription.created',
+      created: 9_999_999_999,
+      data: { object: { id: `sub_${TAG}_forged`, status: 'active', metadata: { company: 'acme' } } },
+    }
+    await blocked('rpc', 'apply_stripe_event (recruiter)', a.rpc('apply_stripe_event', { event: forged }))
+    await blocked('rpc', 'anon apply_stripe_event', anon.rpc('apply_stripe_event', { event: forged }))
+    await blocked('rpc', 'private.apply_stripe_event', a.schema('private' as never).rpc('apply_stripe_event' as never, { event: forged } as never))
+    const forgedSub = await admin.from('subscriptions').select('stripe_subscription_id').eq('stripe_subscription_id', `sub_${TAG}_forged`)
+    const forgedEvent = await admin.from('stripe_events').select('event_id').eq('event_id', `evt_${TAG}_forged`)
+    record(
+      (forgedSub.data?.length ?? 1) === 0 && (forgedEvent.data?.length ?? 1) === 0,
+      'rpc',
+      'forged Stripe event left no subscription or event row',
+      `${forgedSub.data?.length ?? '?'} sub, ${forgedEvent.data?.length ?? '?'} event`,
+    )
+
     // ---- API routes (skipped when the dev server or route isn't there yet) -------------------------
     await probeApi(acme.token, {
       shortlistId: gShortlist.id,
@@ -361,6 +380,13 @@ async function probeApi(
     },
     { name: 'control: GET /api/saved-briefs', method: 'GET', path: '/api/saved-briefs', expect: 200 },
     { name: 'page globex search', method: 'GET', path: `/api/search/${ids.searchId}?page=1` },
+    {
+      name: 'webhook without Stripe signature (recruiter token)',
+      method: 'POST',
+      path: '/api/billing/events',
+      body: { id: `evt_${TAG}_api`, type: 'customer.subscription.created', created: 9_999_999_999, data: { object: { id: `sub_${TAG}_api`, status: 'active', metadata: { company: 'acme' } } } },
+      expect: 400,
+    },
   ]
   for (const c of cases) {
     let res: Response

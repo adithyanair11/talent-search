@@ -188,9 +188,12 @@ Skeletons are shaped like the content they replace: `CandidateRowSkeleton`, `Can
 rows (see `/dev/design`). Don't use spinners for layout-sized areas. Spinners are only for inline buttons.
 
 ### PlanBadge + UpgradeDialog — `plan-badge.tsx`, `upgrade-dialog.tsx`
-- **PlanBadge:** free with searches left → neutral button "1 free search left · Upgrade". Free with 0 left →
-  amber "No searches left". Paid → accent-subtle "Paid", static. Loading → skeleton. "free" is dropped below
-  `sm` to fit the top bar.
+- **PlanBadge:** free with searches left → neutral button "Free · 1 search left · Upgrade". Free with 0 left →
+  amber "Free · 0 left · Upgrade". Pro → accent-subtle "Pro", static. Loading → skeleton. "search(es)" is dropped
+  below `sm` to fit the top bar.
+- **SearchQuota** (`features/plan/components/search-quota.tsx`): on the free plan, "1 free search left · Upgrade"
+  in the search status row (amber "No free searches left" at 0). Hidden on Pro, on error, and below `sm`, where the
+  top-bar PlanBadge sits directly above the search bar.
 - **UpgradeDialog:** a Dialog from 768px up, a Drawer below. `reason="quota"` (after a 402) or `"manual"`
   (from the badge). There is **no checkout** in this app. The copy says the plan updates automatically once
   billing confirms, which happens through the Stripe webhook. Pass `action` only if a real primary action
