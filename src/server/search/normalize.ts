@@ -29,6 +29,8 @@ import {
   type State,
 } from '@/lib/vocabulary'
 
+import { TOO_VAGUE_NOTE, unsupportedNote, type UnsupportedKind } from '@/lib/unsupported'
+
 import { NOT_TYPOS } from './not-typos'
 
 /**
@@ -364,9 +366,7 @@ const FIELD_LOOKUP = lookup<FieldOfStudy>(FIELDS_OF_STUDY, {
 // Normalization
 // ---------------------------------------------------------------------------------------------------------
 
-/** A search that is only "engineers" (well over half the data) is not a brief: it would return near-everyone. */
-export const TOO_VAGUE_NOTE =
-  'the brief is too vague to search: "engineers" alone matches most of the data — add a role, skill, level, location or education'
+export { TOO_VAGUE_NOTE }
 
 /** Preferences that name a vocabulary value are stored canonically, so the ranking boost can match them. */
 const PREFERENCE_LOOKUPS: readonly Lookup<string>[] = [
@@ -387,9 +387,14 @@ function clip(text: string, max: number): string {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`
 }
 
+/** The filter fields a raw value can be written to (the kinds named in unsupported notes). */
+type FieldKind = UnsupportedKind
+
 class Collector {
   readonly notes: string[] = []
   readonly corrections: Correction[] = []
+  /** Values that matched nothing in their own field; reconciled against the other fields before becoming notes. */
+  readonly unmatched: { kind: FieldKind; value: string }[] = []
 
   /** A misspelled value that was mapped to `to` — shown to the recruiter, e.g. "Android (corrected from Andriod)". */
   corrected(from: string, to: readonly string[]): void {
@@ -398,8 +403,12 @@ class Collector {
     if (!this.corrections.some((x) => x.from === c.from && x.to === c.to)) this.corrections.push(c)
   }
 
-  unsupported(kind: string, value: string): void {
-    this.note(`${kind} "${clip(value, 80)}" is not in the data`)
+  unsupported(kind: FieldKind, value: string): void {
+    this.note(unsupportedNote(kind, clip(value, 80)))
+  }
+
+  unknown(kind: FieldKind, value: string): void {
+    this.unmatched.push({ kind, value })
   }
 
   note(text: string): void {
@@ -420,14 +429,14 @@ function cleanStrings(values: readonly string[] | null): string[] {
 function mapList<T extends string>(
   values: readonly string[] | null,
   map: Lookup<T>,
-  kind: string,
+  kind: FieldKind,
   out: Collector,
 ): T[] | undefined {
   const result: T[] = []
   for (const value of cleanStrings(values)) {
     const hit = resolve(map, value, out)
     if (hit) result.push(...hit)
-    else out.unsupported(kind, value)
+    else out.unknown(kind, value)
   }
   return result.length ? uniq(result) : undefined
 }
@@ -479,7 +488,7 @@ function normalizeRoles(
       specific = true
       continue
     }
-    out.unsupported('role', value)
+    out.unknown('role', value)
   }
   return { roles: roles.length ? uniq(roles) : undefined, skills, generic: roles.length > 0 && !specific }
 }
@@ -518,7 +527,7 @@ function normalizeLocations(values: readonly string[] | null, out: Collector): L
     const hit = resolveLocation(value, out)
     if (hit === 'everywhere') everywhere = true
     else if (hit) result.push(hit)
-    else out.unsupported('location', value)
+    else out.unknown('location', value)
   }
   // "In the US or Boston" is everyone in the data — no location constraint at all.
   if (everywhere) return undefined
@@ -586,6 +595,50 @@ function rescueTypo(note: string): (Rescue & { exact: boolean }) | undefined {
   return best && !ambiguous ? { ...best, exact: false } : undefined
 }
 
+type FieldHit =
+  | { kind: 'skill'; target: readonly Skill[] }
+  | { kind: 'role'; target: readonly Role[] }
+  | { kind: 'city'; target: readonly City[] }
+  | { kind: 'state'; target: readonly State[] }
+  | { kind: 'company'; target: readonly Company[] }
+  | { kind: 'company type'; target: readonly CompanyType[] }
+  | { kind: 'degree'; target: readonly Degree[] }
+  | { kind: 'school'; target: readonly School[] }
+  | { kind: 'field of study'; target: readonly FieldOfStudy[] }
+  | { kind: 'level'; target: readonly Seniority[] }
+
+/** Every field's vocabulary, for values the model wrote into the wrong field. `field` is the FieldKind it fills. */
+const FIELD_LOOKUPS = [
+  { kind: 'skill', field: 'skill', map: SKILL_LOOKUP },
+  { kind: 'role', field: 'role', map: ROLE_LOOKUP },
+  { kind: 'city', field: 'location', map: CITY_LOOKUP },
+  { kind: 'state', field: 'location', map: STATE_LOOKUP },
+  { kind: 'company', field: 'company', map: COMPANY_LOOKUP },
+  { kind: 'company type', field: 'company type', map: COMPANY_TYPE_LOOKUP },
+  { kind: 'degree', field: 'degree', map: DEGREE_LOOKUP },
+  { kind: 'school', field: 'school', map: SCHOOL_LOOKUP },
+  { kind: 'field of study', field: 'field of study', map: FIELD_LOOKUP },
+  { kind: 'level', field: 'level', map: SENIORITY_LOOKUP },
+] as const
+
+/**
+ * Exact (or alias) matches of `value` in every field's vocabulary except `own`. No typo matching across fields:
+ * a value that is not exactly some other field's value stays where the model put it.
+ */
+function otherFieldHits(value: string, own: FieldKind | undefined): FieldHit[] {
+  return FIELD_LOOKUPS.flatMap(({ kind, field, map }) => {
+    if (field === own) return []
+    const target = resolveExact<string>(map, value)
+    return target ? [{ kind, target } as FieldHit] : []
+  })
+}
+
+/**
+ * Below this key length a value is only dropped as a duplicate, never moved: two-letter values are too
+ * ambiguous across fields ("MA" is a degree to some and a state code to the data).
+ */
+const MIN_MOVE_KEY = 3
+
 function normalizeYears(
   range: Extraction['years_experience'],
   out: Collector,
@@ -607,7 +660,7 @@ export function normalizeFilters(raw: Extraction): Filters {
 
   const normalizedRoles = normalizeRoles(raw.roles, out)
   let { roles, generic: genericRoles } = normalizedRoles
-  const seniority = mapList(raw.seniority, SENIORITY_LOOKUP, 'level', out)
+  let seniority = mapList(raw.seniority, SENIORITY_LOOKUP, 'level', out)
   let locations = normalizeLocations(raw.locations, out)
 
   const skillsAll = uniq([...(mapList(raw.skills_all, SKILL_LOOKUP, 'skill', out) ?? []), ...normalizedRoles.skills])
@@ -616,6 +669,14 @@ export function normalizeFilters(raw: Extraction): Filters {
   const notes: string[] = []
   for (const note of cleanStrings(raw.unsupported)) {
     if (INPUT_COMMENTARY.test(note)) continue
+    // A split job title: "Terraform platform engineers" → roles ["engineer"] + unsupported "platform". When the
+    // note plus "engineer" is a specific known title, that title replaces the generic engineer group.
+    const title = genericRoles ? resolveExact(ROLE_LOOKUP, `${note} engineer`) : undefined
+    if (title && title !== ENGINEERING_ROLES) {
+      roles = uniq([...title])
+      genericRoles = false
+      continue
+    }
     const rescue = rescueTypo(note)
     if (!rescue) {
       notes.push(note)
@@ -657,15 +718,96 @@ export function normalizeFilters(raw: Extraction): Filters {
   if (raw.company_type && raw.company_type.value.trim()) {
     const value = resolve(COMPANY_TYPE_LOOKUP, raw.company_type.value, out)
     if (value) companyType = { value: value[0], scope: raw.company_type.scope }
-    else out.unsupported('company type', raw.company_type.value)
+    else out.unknown('company type', raw.company_type.value)
   }
 
-  const degrees = mapList(raw.degrees, DEGREE_LOOKUP, 'degree', out)
-  const schools = mapList(raw.schools, SCHOOL_LOOKUP, 'school', out)
-  const fields = mapList(raw.fields_of_study, FIELD_LOOKUP, 'field of study', out)
+  let degrees = mapList(raw.degrees, DEGREE_LOOKUP, 'degree', out)
+  let schools = mapList(raw.schools, SCHOOL_LOOKUP, 'school', out)
+  let fields = mapList(raw.fields_of_study, FIELD_LOOKUP, 'field of study', out)
   const years = normalizeYears(raw.years_experience, out)
 
-  for (const note of notes) out.note(note)
+  /** Does an applied filter already hold this value? */
+  const applied = (hit: FieldHit): boolean => {
+    const all = <T>(list: readonly T[] | undefined, target: readonly T[]) => target.every((t) => list?.includes(t))
+    switch (hit.kind) {
+      case 'skill':
+        return hit.target.every((t) => skillsAll.includes(t) || skillsAny.includes(t))
+      case 'role':
+        return all(roles, hit.target)
+      case 'city':
+        return (locations ?? []).some((l) => 'city' in l && l.city === hit.target[0])
+      case 'state':
+        return (locations ?? []).some((l) => 'state' in l && l.state === hit.target[0])
+      case 'company':
+        return all(companies?.names, hit.target)
+      case 'company type':
+        return companyType?.value === hit.target[0]
+      case 'degree':
+        return all(degrees, hit.target)
+      case 'school':
+        return all(schools, hit.target)
+      case 'field of study':
+        return all(fields, hit.target)
+      case 'level':
+        return all(seniority, hit.target)
+    }
+  }
+  /** Add a value to its real field. False when that would overwrite a different value (one company type). */
+  const apply = (hit: FieldHit): boolean => {
+    switch (hit.kind) {
+      case 'skill':
+        skillsAll.push(...hit.target.filter((t) => !skillsAll.includes(t)))
+        skillsAny = skillsAny.filter((s) => !skillsAll.includes(s))
+        return true
+      case 'role': {
+        const wasGeneric = genericRoles || !roles
+        roles = uniq(genericRoles ? [...hit.target] : [...(roles ?? []), ...hit.target])
+        genericRoles = wasGeneric && hit.target === ENGINEERING_ROLES
+        return true
+      }
+      case 'city':
+        locations = [...(locations ?? []), { city: hit.target[0] }]
+        return true
+      case 'state':
+        locations = [...(locations ?? []), { state: hit.target[0] }]
+        return true
+      case 'company':
+        companies = { names: uniq([...(companies?.names ?? []), ...hit.target]), scope: companies?.scope ?? 'any' }
+        return true
+      case 'company type':
+        if (companyType) return false
+        companyType = { value: hit.target[0], scope: 'any' }
+        return true
+      case 'degree':
+        degrees = uniq([...(degrees ?? []), ...hit.target])
+        return true
+      case 'school':
+        schools = uniq([...(schools ?? []), ...hit.target])
+        return true
+      case 'field of study':
+        fields = uniq([...(fields ?? []), ...hit.target])
+        return true
+      case 'level':
+        seniority = uniq([...(seniority ?? []), ...hit.target])
+        return true
+    }
+  }
+
+  // A value the model wrote into the wrong field ("React" as a role, next to the skill React) is not a requirement
+  // the data can't express. It is dropped when its real field already holds it, moved there when it names exactly
+  // one other field's value, and reported as unsupported only when it matches no field at all.
+  for (const { kind, value } of out.unmatched) {
+    const hits = otherFieldHits(value, kind)
+    if (hits.some(applied)) continue
+    if (hits.length === 1 && key(value).length >= MIN_MOVE_KEY && apply(hits[0])) continue
+    out.unsupported(kind, value)
+  }
+  // A model-reported note is material only if it states a requirement: not a stray number or symbol (no letters),
+  // and not a value an applied filter already holds.
+  for (const note of notes) {
+    if (!/\p{L}/u.test(note) || otherFieldHits(note, undefined).some(applied)) continue
+    out.note(note)
+  }
   const preferences = uniq(
     cleanStrings(raw.preferences).map((p) => {
       for (const map of PREFERENCE_LOOKUPS) {

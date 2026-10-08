@@ -800,3 +800,53 @@ What changed and why:
   localhost/127.0.0.1/[::1], so it can't be pointed at a real database by accident.
 - **Neither is called by `make setup` or `make dev`.** They exist only so a local demo isn't stuck behind the
   402 after two searches.
+
+## Search: values in the wrong field (the "React as a role" bug)
+
+- **Bug:** "Senior React engineers in New York who are open to work" (an example brief on the search page)
+  returned 0. The model returned `roles: ["engineer", "React"]` *and* `skills_all: ["React"]`. Role "React" matched
+  no title, became `unsupported`, and the unsupported-is-material rule emptied the search. Direct extractor runs:
+  6/8 failures on that brief, 8/8 on "senior React engineers in NYC". It was intermittent through the API (the
+  eval happened to pass), so the public and extra sets never caught it.
+- **Cause:** commit d70c093 ("improve extraction and ranking accuracy"). The prompt change in that commit, not the
+  typo/fuzzy matching: "any other job noun goes into roles as written, never into unsupported" made the model
+  copy the skill into roles. The pre-tuning prompt (3364913) gave `roles: ["engineer"]` in 8/8 runs on both briefs.
+  The normalizer has always reported an unknown role as unsupported; the old prompt just never produced one.
+- **Normalizer: reconcile before reporting.** A value that matches nothing in its own field (exact, alias or typo)
+  is checked against every *other* field's vocabulary, exact or alias only (no typo matching across fields). If
+  that field already holds it, it is dropped as a duplicate. If it names exactly one other field's value, it moves
+  there (role "Kubernetes" → skill; location "<a company>" → company, scope any; company "Seattle" → city). It
+  becomes `unsupported` only when it matches no field, or several fields and none holds it ("Statistics" is a
+  skill and a field of study). Values under 3 characters are dropped as duplicates but never moved: "MA" as a
+  degree must not become the state Massachusetts. A moved generic "engineer" still triggers the too-vague rule.
+- **Material = a requirement the data can't express.** Model-reported notes are dropped when they have no letters
+  (a stray "2" from the brief emptied a search too) or name a value an applied filter already holds. A
+  vocabulary value that is *not* applied stays a note: the model may have seen a qualifier ("10 years of Go").
+  A split job title ("Terraform platform engineers" → roles `["engineer"]` + note "platform") becomes that title
+  when "<note> engineer" is a specific known role and the roles are only the generic group.
+- **Prompt:** roles are job titles only. A technology, language, framework, library, platform or tool is never a
+  role, even next to a job word: "<skill> engineers" → roles `["engineer"]` and the skill in skills_all only. One
+  new invented few-shot ("staff Svelte devs around Atlanta"). With it, React in roles went from 8/8 to 0/8.
+  The first version also listed "platform" as never a role. The model then read "Andriod devs" as the Android
+  skill instead of the Mobile Engineer title (2 of 5 eval runs). The rule now names the exception: a word that is
+  a job title ("iOS/Android developers", "mobile devs") is a role. That gave 6/6 Mobile Engineer.
+  It also made the model swap an off-vocabulary technology for a related listed one ("REST API" → gRPC), which
+  returned people for a brief that must return none (1 of 5 runs). The skills rule now says never to swap in a
+  different listed technology because it is related or closest (with invented examples), and to write the brief's
+  own word so the normalizer decides. That gave 6/6 "REST API" kept as written → unsupported → 0.
+- **Kept at 0:** impossible and vague briefs are unchanged ("Python developers in London", "Rust engineers in
+  Antarctica", "engineers"). London isn't a city in the data, so it matches no field and stays material.
+- **Regression briefs** in `scripts/eval-extra.json` (24 now), each with hand-written SQL over the raw columns:
+  "senior React engineers in NYC" (34), "Python developers in London" (0), "Go backend engineers open to work"
+  (69), "Kubernetes SREs" (124).
+- **UI: notes keep their wording; labels are derived.** `src/lib/unsupported.ts` owns the note format
+  (`unsupportedNote`, used by the normalizer) and `unsupportedLabel`, which the chip and the zero-results message
+  show: 'role "React" is not in the data' → "React as a job title". Snapshots and saved searches already store
+  the old wording, so changing the stored text would have needed a migration and would have broken those labels.
+  The too-vague note gets its own empty state ("That's too broad to search") instead of being quoted. The chip
+  truncates on one line, and its tooltip carries the full sentence. The tooltip primitive now caps its width at
+  20rem or the available viewport width (8px collision padding): at 375px a long hint ran off the screen.
+- **Results: 5 independent runs** (a fresh `next start` per run, so the extraction cache starts cold), public
+  (10 briefs) and extra (24): macro F1 mean 1.000 and min 1.000 on both, P@1 1.000. Search p50 1.0–1.3 s
+  (max 2.5 s), paging p50 ≤ 14 ms. The four regression briefs scored 1.000 in every run. Baseline before the
+  fix was also 1.000 through the API: the bug was intermittent, and direct extractor runs (above) are what showed it.

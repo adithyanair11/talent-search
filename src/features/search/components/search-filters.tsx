@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo } from "react"
 import { FilterChip, FilterChipList } from "@/components/filter-chip"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Filters } from "@/lib/schemas/filters"
+import { unsupportedLabel } from "@/lib/unsupported"
 import { type Chip, chipsFor } from "../filter-model"
 import { useSearchUiStore } from "../store"
 import type { Edit } from "./filter-editor"
@@ -137,12 +138,13 @@ const UnsupportedChip = memo(function UnsupportedChip({
   onRemove: (item: string) => void
 }) {
   const remove = useCallback(() => onRemove(item), [onRemove, item])
+  const value = unsupportedLabel(item)
   return (
     <FilterChip
       label="Can't search"
-      value={item}
+      value={value}
       unsupported
-      hint="Not in our candidate data, so it isn't applied"
+      hint={`${value} isn't in our candidate data, so it isn't applied`}
       className="max-w-72"
       animateIn={animateIn}
       index={index}

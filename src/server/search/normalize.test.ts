@@ -538,6 +538,88 @@ describe('model commentary on hostile input', () => {
   })
 })
 
+describe('values in the wrong field', () => {
+  it('a skill the model also wrote as a role is dropped, not reported ("React engineers")', () => {
+    const f = norm({ roles: ['engineer', 'React'], seniority: ['senior'], locations: ['NYC'], skills_all: ['React'] })
+    expect(notes(f)).toEqual([])
+    expect(f.roles).toEqual(ENGINEERING_ROLES)
+    expect(f.skills_all).toEqual(['React'])
+    expect(isSearchable(f)).toBe(true)
+  })
+
+  it('a skill written only as a role moves to skills', () => {
+    const f = norm({ roles: ['engineer', 'Kubernetes'] })
+    expect(notes(f)).toEqual([])
+    expect(f.skills_all).toEqual(['Kubernetes'])
+    expect(isSearchable(f)).toBe(true)
+  })
+
+  it('short values are dropped as duplicates but never moved', () => {
+    expect(notes(norm({ roles: ['Backend Engineer', 'Go'], skills_all: ['Go'] }))).toEqual([])
+    const moved = norm({ roles: ['Backend Engineer', 'Go'] })
+    expect(moved.skills_all).toBeUndefined()
+    expect(notes(moved)).toEqual(['role "Go" is not in the data'])
+    // "MA" is no degree in the data; it must not turn into the state Massachusetts.
+    const ma = norm({ roles: ['Data Scientist'], degrees: ['MA'] })
+    expect(ma.locations).toBeUndefined()
+    expect(notes(ma)).toEqual(['degree "MA" is not in the data'])
+  })
+
+  it('places, companies, schools and levels move between fields', () => {
+    expect(norm({ roles: ['Recruiter'], companies: { names: ['Seattle'], scope: 'any' } }).locations).toEqual([
+      { city: 'Seattle' },
+    ])
+    const company = COMPANY_NAMES[0]
+    const f = norm({ roles: ['Recruiter'], locations: [company] })
+    expect(f.companies).toEqual({ names: [company], scope: 'any' })
+    expect(notes(f)).toEqual([])
+    expect(norm({ roles: ['Data Scientist'], fields_of_study: ['Stanford'] }).schools).toEqual(['Stanford University'])
+    expect(norm({ roles: ['Data Scientist'], skills_all: ['senior'] }).seniority).toEqual(['senior'])
+  })
+
+  it('a value that names several other fields stays unsupported unless one already holds it', () => {
+    // "Statistics" is both a skill and a field of study.
+    expect(notes(norm({ roles: ['Data Scientist'], companies: { names: ['Statistics'], scope: 'any' } }))).toEqual([
+      'company "Statistics" is not in the data',
+    ])
+    expect(
+      notes(norm({ roles: ['Data Scientist'], skills_all: ['Statistics'], companies: { names: ['Statistics'], scope: 'any' } })),
+    ).toEqual([])
+  })
+
+  it('a moved generic role still counts as too vague on its own', () => {
+    const f = norm({ skills_all: ['engineers'] })
+    expect(notes(f)).toEqual([TOO_VAGUE_NOTE])
+    expect(isSearchable(f)).toBe(false)
+  })
+
+  it('values in no field stay unsupported, so impossible briefs still return nothing', () => {
+    const f = norm({ roles: ['engineer'], skills_all: ['Python'], locations: ['London'] })
+    expect(notes(f)).toEqual(['location "London" is not in the data'])
+    expect(isSearchable(f)).toBe(false)
+    expect(notes(norm({ roles: ['Recruiter', 'Astronaut'] }))).toEqual(['role "Astronaut" is not in the data'])
+  })
+})
+
+describe('material unsupported notes', () => {
+  it('drops model notes that repeat an applied filter or have no letters', () => {
+    const f = norm({ roles: ['Backend Engineer'], skills_all: ['Go'], unsupported: ['Go', '2', '--', 'speaks Japanese'] })
+    expect(notes(f)).toEqual(['speaks Japanese'])
+  })
+
+  it('a split job title in a note names that role ("platform" + engineer → DevOps Engineer)', () => {
+    const f = norm({ roles: ['engineer'], skills_all: ['Terraform'], unsupported: ['platform'] })
+    expect(notes(f)).toEqual([])
+    expect(f.roles).toEqual(['DevOps Engineer'])
+    // Only when the roles are the generic group; a specific role keeps the note.
+    expect(notes(norm({ roles: ['Recruiter'], unsupported: ['platform'] }))).toEqual(['platform'])
+  })
+
+  it('keeps a note naming a vocabulary value that is not applied (it may carry a qualifier the model saw)', () => {
+    expect(notes(norm({ roles: ['Backend Engineer'], unsupported: ['Go'] }))).toEqual(['Go'])
+  })
+})
+
 describe('too vague', () => {
   it('only the generic engineer group → not searchable, with an explanation', () => {
     for (const raw of ['engineers', 'developers', 'software engineer']) {

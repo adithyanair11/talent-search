@@ -46,8 +46,8 @@ export const FilterChip = memo(function FilterChip({
 }: FilterChipProps) {
   const body = (
     <>
-      {unsupported && <AlertTriangleIcon aria-hidden className="size-3.5 text-warning" />}
-      <span className="text-muted-foreground">{label}</span>
+      {unsupported && <AlertTriangleIcon aria-hidden className="size-3.5 shrink-0 text-warning" />}
+      <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
       <span
         className={cn(
           "truncate font-medium text-foreground",

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError } from "@/lib/api-client"
 import type { Filters } from "@/lib/schemas/filters"
+import { TOO_VAGUE_NOTE, unsupportedLabel } from "@/lib/unsupported"
 import { type Chip, type ConstraintKey, chipsFor, hasConstraints } from "../filter-model"
 
 /** One-click example briefs for the first visit. Generic, built from the data vocabulary. */
@@ -116,15 +117,27 @@ export function ZeroResults({
 }) {
   const unsupported = filters.unsupported ?? []
   const searchable = hasConstraints(filters)
+  const missing = unsupported.filter((note) => note !== TOO_VAGUE_NOTE)
 
-  if (unsupported.length > 0) {
+  if (unsupported.length > 0 && missing.length === 0) {
+    return (
+      <EmptyState
+        icon={SearchXIcon}
+        title="That's too broad to search"
+        description="“Engineers” on its own matches most of our candidates. Add a role, skill, level, location or school."
+      />
+    )
+  }
+
+  if (missing.length > 0) {
     return (
       <EmptyState
         icon={SearchXIcon}
         title="Part of your brief isn't something we can search"
         description={
           <>
-            Our candidate data doesn&apos;t include {quoteList(unsupported)}, so rather than guess, we show no one.
+            Our candidate data doesn&apos;t include {quoteList(missing.map(unsupportedLabel))}, so rather than guess, we
+            show no one.
             {!searchable && " Add a role, skill or location to search for."}
           </>
         }
