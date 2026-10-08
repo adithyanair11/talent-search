@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { EMPTY_EXTRACTION, isSearchable, type Extraction, type Filters } from '@/lib/schemas/filters'
 import { CITIES, COMPANY_NAMES, DEGREES, FIELDS_OF_STUDY, ROLES, SCHOOLS, SKILLS } from '@/lib/vocabulary'
 
-import { ENGINEERING_ROLES, key, normalizeFilters } from './normalize'
+import { ENGINEERING_ROLES, filtersToExtraction, key, normalizeFilters } from './normalize'
 
 const norm = (partial: Partial<Extraction>): Filters => normalizeFilters({ ...EMPTY_EXTRACTION, ...partial })
 const notes = (f: Filters) => f.unsupported ?? []
@@ -425,5 +425,32 @@ describe('mixed extractions', () => {
 
   it('output always passes the canonical schema (via parse) — open_to_work false is kept', () => {
     expect(norm({ open_to_work: false })).toEqual({ open_to_work: false, unsupported: [] })
+  })
+})
+
+describe('filtersToExtraction (recruiter-edited filters)', () => {
+  it('round-trips canonical filters unchanged through the same normalizer', () => {
+    const filters = norm({
+      roles: ['frontend developer'],
+      seniority: ['sr'],
+      years_experience: { min: 3, max: 9 },
+      locations: ['NYC', 'Texas'],
+      open_to_work: true,
+      skills_all: ['React', 'ts'],
+      skills_any: ['Go', 'Rust'],
+      companies: { names: [COMPANY_NAMES[0]], scope: 'current' },
+      company_type: { value: 'startup', scope: 'any' },
+      degrees: ["master's"],
+      schools: ['CMU'],
+      fields_of_study: ['cs'],
+      unsupported: ['speaks Japanese'],
+      preferences: ['Kotlin'],
+      interpretation: 'Senior frontend engineers.',
+    })
+    expect(normalizeFilters(filtersToExtraction(filters))).toEqual(filters)
+  })
+
+  it('re-applies normalization rules to edited filters', () => {
+    expect(normalizeFilters(filtersToExtraction({ skills_any: ['Go'] }))).toEqual({ skills_all: ['Go'], unsupported: [] })
   })
 })

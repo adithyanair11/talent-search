@@ -260,6 +260,12 @@ async function main(): Promise<void> {
       await blocked('anon', `select ${table}`, anon.from(table).select())
     }
 
+    // ---- search functions ---------------------------------------------------------------------------
+    await blocked('rpc', 'search_page(globex search)', a.rpc('search_page', { p_search_id: gSearch.id, p_page: 1 }))
+    await blocked('rpc', 'anon run_search', anon.rpc('run_search', { p_brief: 'x', p_filters: { roles: ['Recruiter'] } }))
+    await blocked('rpc', 'anon search_page(globex search)', anon.rpc('search_page', { p_search_id: gSearch.id, p_page: 1 }))
+    await blocked('rpc', 'jsonb_text_array (private helper)', a.rpc('jsonb_text_array' as never, { arr: [] } as never))
+
     // ---- API routes (skipped when the dev server or route isn't there yet) -------------------------
     await probeApi(acme.token, { shortlistId: gShortlist.id, searchId: gSearch.id, briefId: gBrief.id })
 

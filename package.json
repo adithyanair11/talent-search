@@ -15,8 +15,8 @@
     "eval": "tsx --conditions=react-server scripts/eval-search.ts",
     "replay:stripe": "tsx scripts/replay-stripe.ts",
     "probe:security": "tsx --conditions=react-server scripts/probe-security.ts",
-    "test:quota": "tsx scripts/test-quota.ts",
-    "bench": "tsx scripts/bench.ts",
+    "test:quota": "tsx --conditions=react-server scripts/test-quota.ts",
+    "bench": "tsx --conditions=react-server scripts/bench.ts",
     "seed": "tsx --conditions=react-server scripts/seed.ts"
   },
   "dependencies": {

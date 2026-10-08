@@ -483,3 +483,31 @@ export function normalizeFilters(raw: Extraction): Filters {
     ...(interpretation && { interpretation }),
   })
 }
+
+/**
+ * Canonical filters back into extraction form, so recruiter-edited filters run through exactly the same
+ * normalization as the model's output (`normalizeFilters(filtersToExtraction(f))`).
+ */
+export function filtersToExtraction(filters: Filters): Extraction {
+  return {
+    roles: filters.roles ?? null,
+    seniority: filters.seniority ?? null,
+    years_experience: filters.years_experience
+      ? { min: filters.years_experience.min ?? null, max: filters.years_experience.max ?? null }
+      : null,
+    locations: filters.locations?.map((l) => ('city' in l ? l.city : l.state)) ?? null,
+    open_to_work: filters.open_to_work ?? null,
+    skills_all: filters.skills_all ?? null,
+    skills_any: filters.skills_any ?? null,
+    companies: filters.companies ? { names: filters.companies.names, scope: filters.companies.scope } : null,
+    company_type: filters.company_type
+      ? { value: filters.company_type.value, scope: filters.company_type.scope }
+      : null,
+    degrees: filters.degrees ?? null,
+    schools: filters.schools ?? null,
+    fields_of_study: filters.fields_of_study ?? null,
+    unsupported: filters.unsupported ?? [],
+    preferences: filters.preferences ?? [],
+    interpretation: filters.interpretation ?? '',
+  }
+}

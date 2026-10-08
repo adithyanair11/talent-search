@@ -175,13 +175,53 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
   of every field, including `unsupported`. Otherwise "ignore all rules… product designers" emptied the search.
   Few-shot briefs are invented. A test checks that none matches or closely overlaps a `data/queries.json` brief
   (word Jaccard < 0.4).
-- **Eval backend: in-process for now.** `npm run eval` runs extract → normalize → `scripts/lib/temp-search.ts`, a
-  **temporary** PostgREST matcher (admin client; candidates are shared, so RLS adds nothing; ordered by id as a
-  placeholder rank). It is deleted when `run_search` lands. Calling the services directly never touches a company's
-  plan or search counter, so the free limit can't block the eval and the eval can't use up a real search. When
-  `POST /api/search` exists, an API backend replaces it. That backend signs in as the globex recruiter, inserts a
-  dedicated fixture subscription (`sub_eval_<ts>`, `active`) with the admin client before the run, and deletes it in
-  `finally`. This follows the `probe-security` fixture pattern and uses an id distinct from the Stripe samples, so
-  `replay:stripe` is unaffected.
+- **Eval backend: the real API.** `npm run eval` signs in as the globex recruiter, gives globex a fixture `active`
+  subscription (`sub_eval_<ts>`) with the admin client, POSTs each brief to `/api/search` and pages through
+  `GET /api/search/{id}` to collect every id. In `finally` it removes the fixture and the searches it created and
+  restores globex's `searches_used`, so the run neither uses up nor is blocked by a real search, and `replay:stripe`
+  is unaffected. It needs the app running (`make dev`, or `API_BASE_URL`). The earlier in-process temporary matcher
+  was deleted; `run_search` uses the same predicates, and eval stayed at P/R 1.000.
 - **Eval metrics:** for an empty expected set, returning nothing scores 1.0 and returning anyone scores 0. Page-1
   precision is the expected share of the first 20 results in rank order.
+
+## Search: find & rank
+
+- **`public.run_search(brief, filters)` is the only way a search row is created** (`security definer`, one
+  transaction). It locks the company row (`select … for update`), checks the free limit, ranks, stores the id
+  snapshot on `searches`, and increments `searches_used`. 25 concurrent requests therefore serialise on the lock,
+  and exactly one succeeds (`npm run test:quota`). The route's `getPlan` pre-check only avoids paying for an LLM
+  call. It is not what enforces the limit.
+- **Quota errors use SQLSTATE `PT402`.** PostgREST maps `PTxxx` to HTTP xxx, so a direct supabase-js `rpc` call
+  also gets a 402, and the service maps `PT402` to `payment_required`. Malformed filters raise `22023`, which maps to
+  422. Any error rolls back the transaction, so nothing is consumed.
+- **The counter increments for paid companies too.** It counts usage, and a paid plan reports `searches_remaining:
+  null`. A company that cancels has used its free search if it searched while paid. The free limit (`1`) is a
+  constant in the function, mirrored from `FREE_SEARCH_LIMIT` (`src/lib/plan.ts`).
+- **The SQL never trusts the caller for "never everyone".** `run_search` can be called directly, so it re-checks:
+  no constraint, or a non-empty `unsupported`, gives an empty snapshot. The server's normalizer decides what is
+  material. Nice-to-haves go to `preferences`, so whatever reaches `unsupported` is a material requirement.
+- **Static SQL only.** Every filter is read into a typed plpgsql local (`private.jsonb_text_array`, casts) and used in
+  one fixed query as `(v_x is null or <predicate>)`. Values are only compared against the generated search columns,
+  never executed.
+- **Ranking (orders the hard-filtered set only, never filters it):** +3 per `skills_any` skill held; +3 per
+  preference term matching a candidate's skill, company, company type, school, field or degree; +2 per requested
+  skill among the candidate's top-3 (headline) skills; recency of the matching experience when filtering by
+  company or company type (current job 3, previous 2, older 1); +1 open to work (unless that is a filter);
+  + `years_experience / 100` (always < 1). Ties are broken by `id` (`collate "C"`). **There is no title-match
+  component**, because `current_title` is exactly the seniority prefix plus the role (data-notes §1), and both are
+  already hard filters.
+- **Recruiter-edited filters run through the same normalizer** (`normalizeFilters(filtersToExtraction(f))`) after
+  `filtersSchema` validation, so edited and extracted filters produce identical canonical forms. The LLM is skipped.
+- **Paging: `public.search_page` is `security invoker`.** RLS on `searches` limits it to the caller's company. It
+  slices the array before unnesting (`result_ids[a:b]` `with ordinality`), so it reads one page, not the whole
+  snapshot. The route also reads the search row: no row (missing, or another company's) → 404. A page past the end
+  → `results: []`. `GET` returns `{ search_id, filters, total, page, results }`. That is the POST shape minus
+  `searches_remaining` (paging never touches the plan), plus `page`.
+- **Results are `CandidateSummary` plus `headline`**, with the full skills array (3–6). The UI chooses how many to
+  show.
+- **LLM failures:** `refused` → 422; `unavailable`/`invalid_output` → 500 with a retry message. Both happen before
+  `run_search`, so a failed extraction never uses up the free search. (503 isn't in the contract's status list.)
+- **`test:quota`, `bench` and `eval` drive the running app over HTTP** (`scripts/lib/api.ts`). `withCompanyState`
+  forces a company to free or paid with admin fixtures and always restores its subscriptions, counter and the
+  searches it created. Bench on `make dev` (p95): new search 1.5 s, paging 13 ms.
+

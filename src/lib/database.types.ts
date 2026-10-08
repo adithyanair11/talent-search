@@ -194,7 +194,16 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "run_search":
+{ Args: { "p_brief": string,"p_filters": Json }; Returns: {
+              "search_id": string,"searches_remaining": number,"total": number
+            }[]
+                           },
+"search_page":
+{ Args: { "p_page": number,"p_search_id": string }; Returns: {
+              "avatar_url": string,"city": string,"country": string,"current_company": string,"current_company_logo_url": string,"current_title": string,"full_name": string,"headline": string,"id": string,"open_to_work": boolean,"ordinal": number,"skills": (string)[],"state": string,"years_experience": number
+            }[]
+                           }
           }
           Enums: {
             [_ in never]: never
