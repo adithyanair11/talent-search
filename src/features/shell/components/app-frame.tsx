@@ -19,6 +19,7 @@ import { PlanBadge } from "@/components/plan-badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { usePlan } from "@/features/plan/hooks"
 import { useUpgradeStore } from "@/features/plan/store"
+import { SavedSearchesSidebar } from "@/features/saved-briefs/components/saved-searches-sidebar"
 
 const UpgradeDialog = dynamic(() => import("@/components/upgrade-dialog").then((m) => m.UpgradeDialog), {
   ssr: false,
@@ -114,6 +115,7 @@ export function AppFrame({ account, children }: { account: React.ReactNode; chil
               <SidebarSection>
                 <Nav kind="sidebar" />
               </SidebarSection>
+              <SavedSearchesSidebar />
             </SidebarBody>
             <SidebarFooter>
               <Plan />

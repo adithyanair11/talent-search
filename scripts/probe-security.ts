@@ -344,6 +344,22 @@ async function probeApi(
     { name: 'control: GET own shortlist', method: 'GET', path: `/api/shortlists/${ids.ownShortlistId}`, expect: 200 },
     { name: 'GET /api/saved-briefs hides globex', method: 'GET', path: '/api/saved-briefs', mustNotContain: ids.briefId },
     { name: 'DELETE globex saved brief', method: 'DELETE', path: `/api/saved-briefs/${ids.briefId}` },
+    { name: 'saved brief id injection', method: 'DELETE', path: `/api/saved-briefs/${encodeURIComponent("1' or '1'='1")}` },
+    {
+      name: 'save brief with smuggled company_id',
+      method: 'POST',
+      path: '/api/saved-briefs',
+      body: { brief: `${TAG} smuggle`, filters: {}, company_id: 'globex' },
+      expect: 400,
+    },
+    {
+      name: 'save brief with off-vocabulary filters',
+      method: 'POST',
+      path: '/api/saved-briefs',
+      body: { brief: `${TAG} smuggle`, filters: { roles: ["x'); drop table candidates; --"] } },
+      expect: 400,
+    },
+    { name: 'control: GET /api/saved-briefs', method: 'GET', path: '/api/saved-briefs', expect: 200 },
     { name: 'page globex search', method: 'GET', path: `/api/search/${ids.searchId}?page=1` },
   ]
   for (const c of cases) {

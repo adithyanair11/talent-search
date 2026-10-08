@@ -13,6 +13,7 @@ import { CandidateSheetContainer } from "@/features/people/components/candidate-
 import { usePrefetchPerson } from "@/features/people/hooks"
 import { usePersonParam } from "@/features/people/use-person-param"
 import { useUpgradeStore } from "@/features/plan/store"
+import { SaveSearchButton } from "@/features/saved-briefs/components/save-search-button"
 import { ApiError } from "@/lib/api-client"
 import { formatCorrection, type Filters } from "@/lib/schemas/filters"
 import { type SearchRequest, searchIdSchema } from "@/lib/schemas/search"
@@ -216,6 +217,8 @@ export function SearchPage() {
   }
 
   const total = current?.total
+  // Saves what is on screen: the brief the results are for and the filters as edited (including a pending edit).
+  const saveable = current !== undefined && !notFound && !run.isPending
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-10 sm:px-6">
       <h1 className="sr-only">Search candidates</h1>
@@ -230,15 +233,18 @@ export function SearchPage() {
           placeholder={`e.g. ${placeholder}`}
           autoFocus={!raw}
         />
-        <p aria-live="polite" className="mt-3 min-h-5 px-1 text-sm text-muted-foreground tabular-nums">
-          {run.isPending ? (
-            <PendingStatus key={run.submittedAt} usesModel={!run.variables?.filters} />
-          ) : draft ? (
-            "Updating…"
-          ) : total !== undefined && !notFound ? (
-            `${total.toLocaleString()} ${total === 1 ? "person" : "people"}`
-          ) : null}
-        </p>
+        <div className="mt-3 flex min-h-8 items-center justify-between gap-3">
+          <p aria-live="polite" className="min-w-0 px-1 text-sm text-muted-foreground tabular-nums">
+            {run.isPending ? (
+              <PendingStatus key={run.submittedAt} usesModel={!run.variables?.filters} />
+            ) : draft ? (
+              "Updating…"
+            ) : total !== undefined && !notFound ? (
+              `${total.toLocaleString()} ${total === 1 ? "person" : "people"}`
+            ) : null}
+          </p>
+          <SaveSearchButton brief={saveable ? current.brief : undefined} filters={saveable ? filters : undefined} />
+        </div>
       </div>
       {body}
       <CandidateSheetContainer

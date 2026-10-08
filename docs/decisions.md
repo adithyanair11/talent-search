@@ -416,3 +416,21 @@ expected sets don't depend on the code under test.
   is runtime data under cacheComponents. Its links prerender un-highlighted and the active state streams in.
 - **`probe:security` now judges non-JSON responses.** Only Next's HTML 404 ("route not built yet") counts as a skip.
   Before this, a 204 from a successful cross-tenant DELETE would have been skipped instead of failed.
+
+## Saved searches (`/api/saved-briefs/*`, /saved)
+
+- **`POST /api/saved-briefs` validates `filters` with the same `filtersSchema` as recruiter-edited search
+  filters** (every value from the data vocabulary, strict keys), so a saved search can always be re-run. It returns
+  201 `{ id }`. `GET` returns `{ saved_briefs: [{ id, brief, filters, created_at }] }`, newest first. Stored filters
+  are re-parsed on read and fall back to `{}`, so a later vocabulary change can't hand the UI unknown values.
+- **Saved searches are company-wide**, like shortlists. Every recruiter at the company sees and can delete them
+  (RLS on `company_id`). A malformed id, another company's row and a deleted row all return 404.
+- **"Save search" saves the brief the results are for plus the filters as currently edited**, not text typed
+  in the bar but not yet run. The button reads "Saved" when that exact brief + filters already exists, compared
+  with a key-order-insensitive key (jsonb reorders keys). This stops duplicate saves without a unique constraint.
+- **Run = `POST /api/search { brief, filters }`**. It's a new search and counts against the free plan. When the
+  cached plan says 0 free searches left, the UpgradeDialog opens without calling the API. A 402 from a race does
+  the same. In the sidebar, clicking a saved search runs it, because that's the only reason to click it.
+- **Delete is optimistic with Undo, no confirmation.** It's cheap to recreate. Undo saves the same brief + filters
+  again, so the restored row has a new id and saved date, and moves to the top. Recruiters can only write `brief`
+  and `filters`, and soft-delete isn't worth adding for a 6-second window.
