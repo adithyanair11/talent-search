@@ -28,7 +28,7 @@ Non-obvious choices, newest last. Feeds the README.
   `https://rotto.com/rotto/...`, so only that host + path prefix is allowed.
 - **npm 11 `allowScripts`:** install scripts are approved per package (`esbuild`, `unrs-resolver`) in
   `package.json`; the Supabase CLI package needs none.
-- **Unimplemented scripts** (`eval`, `replay:stripe`, `test:quota`, `bench`) are stubs
+- **Unimplemented scripts** (`replay:stripe`, `test:quota`, `bench`) are stubs
   that exit 0 so `make setup` and the npm scripts work before each feature lands.
 
 ## Search semantics (from data analysis)
@@ -134,3 +134,54 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
 - **Vitest aliases `server-only` to its no-op build and loads `.env.local` via `scripts/lib/env.ts`.** Route
   handlers are tested by calling `GET(new Request(...))` against local Supabase with the seeded recruiters; the suite
   skips itself when Supabase isn't running.
+
+## Search: extraction & eval
+
+- **Two filter schemas.** `filtersSchema` (`src/lib/schemas/filters.ts`) holds canonical filters: zod enums built
+  from `src/lib/vocabulary.ts`, which a unit test checks for exact equality with `data/candidates.json`. Search and
+  recruiter-edited filters use it. The LLM emits `extractionSchema`, which has the same keys but **free-string
+  values**. If the JSON schema used enums, strict decoding would force the model to coerce "Lead", "C++" or "Oakland"
+  into the nearest valid value and return the wrong people. With free strings, the deterministic normalizer decides,
+  and anything it can't map goes to `unsupported`.
+- **Strict structured outputs need every key `required` and `additionalProperties: false`,** so "optional" is
+  expressed as nullable (`anyOf [schema, null]`). The JSON schema is hand-written. A test checks that it is strict
+  and that its keys match both zod schemas.
+- **`unsupported` is `string[]`** (short phrases, ≤ 10 × 200 chars), as the task specified, not the
+  `{term, reason}[]` sketched in data-notes §4. The normalizer adds its own notes (`skill "C++" is not in the data`).
+- **`preferences: string[]` (informational, never a constraint).** Briefs like "…, ideally ex-startup" or
+  "Kotlin a bonus" made the model put the nice-to-have into `unsupported`, which empties the whole search. Prompt
+  wording alone did not fix it. A dedicated schema slot did. Preferences never narrow results. They are kept for the
+  UI and for possible ranking boosts later.
+- **Generic "engineer"/"developer" → the 7 `… Engineer` roles; "<skill> engineers" → those roles + the skill.**
+  Without a role filter, "Python developers" would include Data Scientists. The engineering roles are derived from
+  the vocabulary (`role` ends in " Engineer"), so this isn't a list kept by hand.
+- **"US"/"USA" constrains nothing** (every candidate is in the US). It becomes neither a filter nor `unsupported`.
+  data-notes §4 suggested `unsupported`, but that would return 0 results for a requirement everyone meets.
+- **Normalizer never drops a term silently.** Every raw value maps to a canonical value or becomes an `unsupported`
+  note. Lookup keys ignore case, spaces and punctuation but keep `+`/`#` (so "C++" never matches "C"), with a
+  trailing-"s" plural fallback. Alias tables are general synonyms (NYC, k8s, CMU, master's → MS+MBA …). They are
+  never rules written for a particular brief. "TF" is deliberately ambiguous (TensorFlow/Terraform) and stays
+  unsupported.
+- **`isSearchable(filters)`**: false when `unsupported` is non-empty or no constraint is set, giving 0 results
+  ("never return everyone").
+- **LLM call:** `chat.completions` with `response_format: json_schema` (strict), temperature 0,
+  `max_completion_tokens` 400, client `timeout` 2.5 s and `maxRetries: 0`. We add **one retry only for
+  connection errors that are not timeouts.** Retrying a timeout would blow the ~3 s search budget, and
+  429/5xx/4xx aren't network errors. Failures surface as `FilterExtractionError` (`unavailable` / `invalid_output` /
+  `refused`), which the route will map to a JSON error.
+- **Brief handling:** control/invisible characters removed, whitespace collapsed, length capped at 500, and `<`/`>`
+  replaced with look-alike characters so the brief can't close its `<brief>` delimiter. The brief is only ever
+  the final user message. The system prompt tells the model to ignore instructions in the brief and to keep them out
+  of every field, including `unsupported`. Otherwise "ignore all rules… product designers" emptied the search.
+  Few-shot briefs are invented. A test checks that none matches or closely overlaps a `data/queries.json` brief
+  (word Jaccard < 0.4).
+- **Eval backend: in-process for now.** `npm run eval` runs extract → normalize → `scripts/lib/temp-search.ts`, a
+  **temporary** PostgREST matcher (admin client; candidates are shared, so RLS adds nothing; ordered by id as a
+  placeholder rank). It is deleted when `run_search` lands. Calling the services directly never touches a company's
+  plan or search counter, so the free limit can't block the eval and the eval can't use up a real search. When
+  `POST /api/search` exists, an API backend replaces it. That backend signs in as the globex recruiter, inserts a
+  dedicated fixture subscription (`sub_eval_<ts>`, `active`) with the admin client before the run, and deletes it in
+  `finally`. This follows the `probe-security` fixture pattern and uses an id distinct from the Stripe samples, so
+  `replay:stripe` is unaffected.
+- **Eval metrics:** for an empty expected set, returning nothing scores 1.0 and returning anyone scores 0. Page-1
+  precision is the expected share of the first 20 results in rank order.
