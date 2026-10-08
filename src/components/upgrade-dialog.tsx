@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckIcon } from "lucide-react"
+import { CheckIcon, SparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -57,18 +57,28 @@ export function UpgradeDialog({
   const isDesktop = useIsDesktop()
   const copy = COPY[reason]
 
+  const mark = (
+    <span
+      aria-hidden
+      className="mb-1 flex size-11 items-center justify-center rounded-full bg-[image:var(--accent-gradient)] text-primary-foreground shadow-[var(--glow)]"
+    >
+      <SparklesIcon className="size-5" />
+    </span>
+  )
   const benefits = (
-    <ul className="space-y-2.5 text-base">
+    <ul className="space-y-2.5 rounded-xl border border-border bg-surface p-4 text-base">
       {BENEFITS.map((b) => (
         <li key={b} className="flex items-center gap-2.5">
-          <CheckIcon aria-hidden className="size-4 text-primary" />
+          <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary-subtle-foreground">
+            <CheckIcon className="size-3" strokeWidth={3} />
+          </span>
           {b}
         </li>
       ))}
     </ul>
   )
   const note = (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-sm text-pretty text-muted-foreground">
       Pro means your company has an active Stripe subscription. There&apos;s no checkout in this demo: your plan
       switches to Pro here automatically once Stripe confirms the subscription to our billing webhook.
     </p>
@@ -84,7 +94,8 @@ export function UpgradeDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="gap-5 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl">{copy.title}</DialogTitle>
+            {mark}
+            <DialogTitle className="text-xl font-semibold">{copy.title}</DialogTitle>
             <DialogDescription className="text-base">{copy.description}</DialogDescription>
           </DialogHeader>
           {benefits}
@@ -102,7 +113,8 @@ export function UpgradeDialog({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DrawerHeader className="text-left">
-          <DrawerTitle className="text-xl">{copy.title}</DrawerTitle>
+          {mark}
+          <DrawerTitle className="text-xl font-semibold">{copy.title}</DrawerTitle>
           <DrawerDescription className="text-base">{copy.description}</DrawerDescription>
         </DrawerHeader>
         <div className="space-y-4 px-4">

@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
 // next/font downloads at build time and self-hosts the files — no runtime request to Google.
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Plus Jakarta Sans: geometric, warm, large x-height, real tabular figures (docs/design.md §0). Variable font.
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
   display: "swap",
 });
@@ -23,8 +24,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0c0e" },
+    { media: "(prefers-color-scheme: light)", color: "#fbfaf8" },
+    { media: "(prefers-color-scheme: dark)", color: "#141311" },
   ],
 };
 
@@ -33,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${jakarta.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <Providers>{children}</Providers>

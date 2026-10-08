@@ -2,7 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Dark variant. `.dark` on <html> comes from next-themes. `.theme-dark` / `.theme-light` scope a theme to
+ * a subtree (the side-by-side panes on /dev/design); a `.theme-light` pane opts out of an ancestor's dark.
+ */
+@custom-variant dark (&:where(.dark *, .theme-dark, .theme-dark *):not(:where(.theme-light, .theme-light *)));
 
 /*
  * Design tokens — the source of truth is docs/design.md.
@@ -11,65 +15,74 @@
  */
 
 :root {
-  /* Cool grey ramp — 11 steps, hue 260, low chroma. */
-  --gray-50: oklch(0.985 0.002 260);
-  --gray-100: oklch(0.967 0.004 260);
-  --gray-200: oklch(0.925 0.006 260);
-  --gray-300: oklch(0.87 0.009 260);
-  --gray-400: oklch(0.71 0.014 260);
-  --gray-500: oklch(0.53 0.017 260);
-  --gray-600: oklch(0.445 0.017 260);
-  --gray-700: oklch(0.372 0.015 260);
-  --gray-800: oklch(0.279 0.012 260);
-  --gray-900: oklch(0.21 0.01 260);
-  --gray-950: oklch(0.145 0.008 260);
+  /* Warm stone ramp — 11 steps, hue 70–85, very low chroma. */
+  --gray-50: oklch(0.985 0.003 85);
+  --gray-100: oklch(0.966 0.004 85);
+  --gray-200: oklch(0.928 0.006 80);
+  --gray-300: oklch(0.872 0.008 80);
+  --gray-400: oklch(0.71 0.01 75);
+  --gray-500: oklch(0.54 0.012 70);
+  --gray-600: oklch(0.46 0.012 70);
+  --gray-700: oklch(0.38 0.01 70);
+  --gray-800: oklch(0.285 0.008 70);
+  --gray-900: oklch(0.215 0.006 70);
+  --gray-950: oklch(0.155 0.005 70);
 
-  /* The one accent hue (cobalt): primary action, focus, selection — nothing else. */
-  --accent-hue: 262;
+  /* The one accent hue (forest green): primary action, focus, selection — nothing else. */
+  --accent-hue: 160;
+}
 
-  /* Semantic roles — light */
-  --background: oklch(1 0 0);
+:root,
+.theme-light {
+  /* Semantic roles — light. Warm off-white page, white cards (as in the references). */
+  --background: oklch(0.984 0.003 85);
   --foreground: var(--gray-950);
-  --surface: var(--gray-50);
+  --surface: oklch(0.968 0.004 85);
   --card: oklch(1 0 0);
   --card-foreground: var(--gray-950);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--gray-950);
 
-  --primary: oklch(0.53 0.2 var(--accent-hue));
-  --primary-foreground: oklch(0.99 0 0);
-  --primary-subtle: oklch(0.53 0.2 var(--accent-hue) / 0.08);
-  --primary-subtle-foreground: oklch(0.45 0.2 var(--accent-hue));
+  --primary: oklch(0.42 0.085 var(--accent-hue));
+  --primary-foreground: oklch(0.99 0.005 var(--accent-hue));
+  --primary-subtle: oklch(0.55 0.1 var(--accent-hue) / 0.1);
+  --primary-subtle-foreground: oklch(0.4 0.09 var(--accent-hue));
 
   --secondary: var(--gray-100);
   --secondary-foreground: var(--gray-900);
   --muted: var(--gray-100);
   --muted-foreground: var(--gray-500);
   /* shadcn name: a NEUTRAL hover/active surface — not the brand accent. */
-  --accent: var(--gray-100);
-  --accent-foreground: var(--gray-900);
+  --accent: oklch(0.155 0.005 70 / 0.05);
+  --accent-foreground: var(--gray-950);
 
-  --success: oklch(0.52 0.13 152);
-  --success-subtle: oklch(0.52 0.13 152 / 0.1);
-  --warning: oklch(0.55 0.13 65);
-  --warning-subtle: oklch(0.75 0.15 75 / 0.16);
-  --destructive: oklch(0.55 0.21 27);
-  --destructive-subtle: oklch(0.55 0.21 27 / 0.08);
+  --success: oklch(0.5 0.12 150);
+  --success-subtle: oklch(0.5 0.12 150 / 0.1);
+  --warning: oklch(0.55 0.12 65);
+  --warning-subtle: oklch(0.78 0.14 78 / 0.18);
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-subtle: oklch(0.55 0.19 27 / 0.08);
 
-  --border: var(--gray-200);
-  --border-strong: var(--gray-300);
-  --input: var(--gray-200);
-  --ring: oklch(0.53 0.2 var(--accent-hue));
+  --border: oklch(0.155 0.005 70 / 0.09);
+  --border-strong: oklch(0.155 0.005 70 / 0.16);
+  --input: oklch(0.155 0.005 70 / 0.12);
+  --ring: oklch(0.52 0.1 var(--accent-hue));
 
-  --overlay: oklch(0.145 0.008 260 / 0.4);
+  --overlay: oklch(0.155 0.005 70 / 0.32);
 
-  --sidebar: var(--gray-50);
+  /* Used sparingly: composer focus ring and the send button only. */
+  --accent-gradient: linear-gradient(135deg, oklch(0.47 0.1 158), oklch(0.58 0.09 192));
+  --glow: 0 0 0 4px oklch(0.55 0.1 165 / 0.1), 0 12px 40px -12px oklch(0.55 0.12 175 / 0.35);
+  /* Skeleton / thinking shimmer highlight. */
+  --shimmer: oklch(1 0 0 / 0.7);
+
+  --sidebar: var(--background);
   --sidebar-foreground: var(--gray-700);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.145 0.008 260 / 0.05);
+  --sidebar-accent: oklch(0.155 0.005 70 / 0.05);
   --sidebar-accent-foreground: var(--gray-950);
-  --sidebar-border: var(--gray-200);
+  --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
   --chart-1: var(--gray-300);
@@ -78,69 +91,78 @@
   --chart-4: var(--gray-700);
   --chart-5: var(--gray-800);
 
-  --radius: 10px;
+  --radius: 12px;
 
+  --shadow-soft: 0 1px 2px oklch(0.2 0.01 70 / 0.04), 0 4px 12px -4px oklch(0.2 0.01 70 / 0.06);
+  --composer-shadow: 0 1px 2px oklch(0.2 0.01 70 / 0.04), 0 12px 32px -16px oklch(0.2 0.01 70 / 0.16);
   --shadow-overlay:
-    0 0 0 1px oklch(0.145 0.008 260 / 0.04), 0 4px 8px -2px oklch(0.145 0.008 260 / 0.06),
-    0 16px 32px -8px oklch(0.145 0.008 260 / 0.12);
+    0 0 0 1px oklch(0.155 0.005 70 / 0.05), 0 4px 8px -2px oklch(0.155 0.005 70 / 0.06),
+    0 20px 40px -12px oklch(0.155 0.005 70 / 0.16);
 
   color-scheme: light;
 }
 
-.dark {
-  --background: var(--gray-950);
-  --foreground: var(--gray-50);
-  --surface: oklch(0.17 0.008 260);
-  --card: oklch(0.17 0.008 260);
-  --card-foreground: var(--gray-50);
-  --popover: oklch(0.195 0.009 260);
-  --popover-foreground: var(--gray-50);
+.dark,
+.theme-dark {
+  --background: oklch(0.165 0.004 75);
+  --foreground: oklch(0.96 0.004 85);
+  --surface: oklch(0.185 0.005 75);
+  --card: oklch(0.198 0.005 75);
+  --card-foreground: oklch(0.96 0.004 85);
+  --popover: oklch(0.215 0.006 75);
+  --popover-foreground: oklch(0.96 0.004 85);
 
-  --primary: oklch(0.58 0.19 var(--accent-hue));
-  --primary-foreground: oklch(0.99 0 0);
-  --primary-subtle: oklch(0.68 0.16 var(--accent-hue) / 0.14);
-  --primary-subtle-foreground: oklch(0.8 0.11 var(--accent-hue));
+  --primary: oklch(0.76 0.12 var(--accent-hue));
+  --primary-foreground: oklch(0.2 0.035 var(--accent-hue));
+  --primary-subtle: oklch(0.76 0.12 var(--accent-hue) / 0.14);
+  --primary-subtle-foreground: oklch(0.84 0.1 var(--accent-hue));
 
-  --secondary: var(--gray-800);
-  --secondary-foreground: var(--gray-50);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: var(--gray-400);
-  --accent: oklch(0.24 0.01 260);
-  --accent-foreground: var(--gray-50);
+  --secondary: oklch(1 0 0 / 0.08);
+  --secondary-foreground: oklch(0.96 0.004 85);
+  --muted: oklch(1 0 0 / 0.06);
+  --muted-foreground: oklch(0.7 0.01 75);
+  --accent: oklch(1 0 0 / 0.06);
+  --accent-foreground: oklch(0.96 0.004 85);
 
-  --success: oklch(0.75 0.14 152);
-  --success-subtle: oklch(0.75 0.14 152 / 0.12);
+  --success: oklch(0.76 0.13 150);
+  --success-subtle: oklch(0.76 0.13 150 / 0.12);
   --warning: oklch(0.82 0.13 80);
   --warning-subtle: oklch(0.82 0.13 80 / 0.12);
-  --destructive: oklch(0.7 0.18 25);
-  --destructive-subtle: oklch(0.7 0.18 25 / 0.12);
+  --destructive: oklch(0.7 0.17 25);
+  --destructive-subtle: oklch(0.7 0.17 25 / 0.12);
 
-  --border: oklch(1 0 0 / 0.09);
-  --border-strong: oklch(1 0 0 / 0.16);
+  --border: oklch(1 0 0 / 0.08);
+  --border-strong: oklch(1 0 0 / 0.15);
   --input: oklch(1 0 0 / 0.12);
-  --ring: oklch(0.7 0.15 var(--accent-hue));
+  --ring: oklch(0.76 0.12 var(--accent-hue));
 
   --overlay: oklch(0 0 0 / 0.6);
 
-  --sidebar: oklch(0.165 0.008 260);
-  --sidebar-foreground: var(--gray-300);
+  --accent-gradient: linear-gradient(135deg, oklch(0.72 0.13 158), oklch(0.76 0.11 192));
+  --glow: 0 0 0 4px oklch(0.76 0.12 165 / 0.12), 0 12px 40px -12px oklch(0.7 0.13 175 / 0.4);
+  --shimmer: oklch(1 0 0 / 0.07);
+
+  --sidebar: var(--background);
+  --sidebar-foreground: oklch(0.82 0.008 80);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(1 0 0 / 0.06);
-  --sidebar-accent-foreground: var(--gray-50);
-  --sidebar-border: oklch(1 0 0 / 0.07);
+  --sidebar-accent-foreground: oklch(0.96 0.004 85);
+  --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
+  --shadow-soft: 0 0 0 1px oklch(1 0 0 / 0.02), 0 4px 12px -4px oklch(0 0 0 / 0.4);
+  --composer-shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px -16px oklch(0 0 0 / 0.6);
   --shadow-overlay:
     0 0 0 1px oklch(1 0 0 / 0.06), 0 4px 8px -2px oklch(0 0 0 / 0.3),
-    0 16px 32px -8px oklch(0 0 0 / 0.5);
+    0 20px 40px -12px oklch(0 0 0 / 0.55);
 
   color-scheme: dark;
 }
 
 /* Static scale tokens (these generate utilities). */
 @theme {
-  /* Type scale 12/13/14/16/20/24/32 with tight UI line-heights. Body = text-base (14px). */
+  /* Type scale 12/13/14/16/20/24/32/40 with tight UI line-heights. Body = text-base (14px). */
   --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;
   --text-sm: 0.8125rem;
@@ -158,30 +180,39 @@
   --text-3xl: 2rem;
   --text-3xl--line-height: 2.375rem;
   --text-3xl--letter-spacing: -0.025em;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 2.875rem;
+  --text-4xl--letter-spacing: -0.03em;
 
-  /* Motion: 150–200 ms ease-out. */
+  /* Motion: 150 / 200 / 250 ms ease-out. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Hairline first: small shadows are disabled; only overlays get depth (shadow-md+). */
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-chip-in: chip-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-up: fade-up 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
+
+  /* Hairline first. xs is disabled (shadcn's flat shadows vanish); sm is a soft card lift. */
   --shadow-2xs: 0 0 #0000;
   --shadow-xs: 0 0 #0000;
-  --shadow-sm: 0 0 #0000;
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-jakarta);
   --font-mono: var(--font-geist-mono);
 
-  /* Radii 6 / 10 / 14. */
+  /* Radii 8 / 12 / 16 (+ 6 for tiny tags, full for pills). */
   --radius-xs: 6px;
-  --radius-sm: 6px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 14px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 16px;
 
+  --shadow-sm: var(--shadow-soft);
+  --shadow-composer: var(--composer-shadow);
   --shadow-md: var(--shadow-overlay);
   --shadow-lg: var(--shadow-overlay);
   --shadow-xl: var(--shadow-overlay);
@@ -252,6 +283,11 @@
     @apply bg-background font-sans text-base text-foreground;
     text-rendering: optimizeLegibility;
   }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
   ::selection {
     background: var(--primary-subtle);
   }
@@ -261,7 +297,71 @@
   }
 }
 
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+
+/* Loading placeholder: a soft sweep, not a pulse. */
+@utility skeleton-shimmer {
+  background-color: var(--muted);
+  background-image: linear-gradient(90deg, transparent 25%, var(--shimmer) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* "Thinking" text: a light sweep across the active step's label. */
+@utility text-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* Gradient hairline border (composer focus): paint the gradient on the border box, the surface on the padding box. */
+@utility border-gradient {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    var(--accent-gradient) border-box;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .text-shimmer {
+    background: none;
+    color: var(--foreground);
+  }
+
   *,
   *::before,
   *::after {

@@ -81,7 +81,7 @@ export function CandidateSheet(props: CandidateSheetProps) {
           showCloseButton={false}
           onOpenAutoFocus={focusContainer}
           onInteractOutside={keepOpenForToasts}
-          className="w-full gap-0 p-0 outline-none sm:max-w-[480px]"
+          className="w-full gap-0 overflow-hidden bg-card p-0 outline-none sm:max-w-[480px] md:inset-y-2 md:right-2 md:h-auto md:rounded-2xl md:border md:border-border"
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
           <SheetDescription className="sr-only">{description}</SheetDescription>
@@ -236,7 +236,7 @@ function Section({ title, aside, children }: { title: string; aside?: React.Reac
   return (
     <section className="px-5 py-5 sm:px-6">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+        <h3 className="text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase">{title}</h3>
         {aside}
       </div>
       {children}
@@ -258,9 +258,9 @@ export function CandidateProfile({
 
   return (
     <div className="divide-y divide-border">
-      <header className="px-5 pt-5 pb-5 sm:px-6 sm:pt-6">
+      <header className="bg-gradient-to-b from-surface to-transparent px-5 pt-6 pb-6 sm:px-6">
         <CandidateAvatar src={c.avatar_url} name={c.full_name} size="lg" priority />
-        <h2 className="mt-4 text-xl font-semibold text-balance">{c.full_name}</h2>
+        <h2 className="mt-4 text-2xl font-semibold text-balance">{c.full_name}</h2>
         <p className="mt-1 text-base text-pretty text-muted-foreground">{c.headline}</p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -334,7 +334,7 @@ export function CandidateProfile({
             const matched = matchedSkills?.has(s) ?? false
             return (
               <li key={s} className="max-w-full">
-                <Tag matched={matched} className="h-6 px-2 text-sm">
+                <Tag matched={matched} className="h-7 px-3 text-sm">
                   {s}
                   {matched && <span className="sr-only"> (matches your search)</span>}
                 </Tag>
@@ -350,18 +350,18 @@ export function CandidateProfile({
 export function CandidateProfileSkeleton() {
   return (
     <div role="status" aria-label="Loading candidate" className="divide-y divide-border">
-      <div className="px-5 pt-5 pb-5 sm:px-6 sm:pt-6">
+      <div className="px-5 pt-6 pb-6 sm:px-6">
         <Skeleton className="size-16 rounded-full" />
-        <Skeleton className="mt-4 h-6 w-48" />
-        <Skeleton className="mt-2 h-4 w-72 max-w-full" />
-        <Skeleton className="mt-3 h-4 w-56 max-w-full" />
-        <Skeleton className="mt-5 h-9 w-32 max-md:hidden" />
+        <Skeleton className="mt-4 h-7 w-48 rounded-full" />
+        <Skeleton className="mt-2 h-4 w-72 max-w-full rounded-full" />
+        <Skeleton className="mt-3 h-4 w-56 max-w-full rounded-full" />
+        <Skeleton className="mt-5 h-9 w-32 rounded-full max-md:hidden" />
       </div>
       <div className="px-5 py-5 sm:px-6">
         <Skeleton className="mb-3 h-4 w-20" />
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex gap-3 pb-5 last:pb-0">
-            <Skeleton className="size-8 shrink-0" />
+            <Skeleton className="size-8 shrink-0 rounded-md" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-44" />
               <Skeleton className="h-3.5 w-28" />
@@ -380,7 +380,7 @@ export function CandidateProfileSkeleton() {
         <Skeleton className="mb-3 h-4 w-12" />
         <div className="flex flex-wrap gap-1.5">
           {["w-16", "w-20", "w-14", "w-24", "w-16"].map((w, i) => (
-            <Skeleton key={i} className={cn("h-6", w)} />
+            <Skeleton key={i} className={cn("h-7 rounded-full", w)} />
           ))}
         </div>
       </div>

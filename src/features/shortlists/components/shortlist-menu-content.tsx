@@ -67,7 +67,7 @@ export function ShortlistMenuContent({
                       value={l.name}
                       aria-checked={on}
                       onSelect={() => setMembership({ list: l, person, on: !on })}
-                      className="min-h-11 gap-2.5 md:min-h-8"
+                      className="min-h-11 gap-2.5 rounded-lg md:min-h-9"
                     >
                       <CheckboxIndicator checked={on} />
                       <span className="min-w-0 flex-1 truncate">{l.name}</span>
@@ -80,7 +80,7 @@ export function ShortlistMenuContent({
           )}
         </CommandList>
       </Command>
-      <div className="border-t border-border p-1">
+      <div className="border-t border-border p-1.5">
         {creating ? (
           <NewListForm
             initialName={exact ? "" : query.trim()}
@@ -93,7 +93,7 @@ export function ShortlistMenuContent({
         ) : (
           <Button
             variant="ghost"
-            className="w-full justify-start font-normal max-md:h-11"
+            className="w-full justify-start rounded-lg font-normal text-primary hover:text-primary max-md:h-11"
             onClick={() => setCreating(true)}
             disabled={!lists.data}
           >

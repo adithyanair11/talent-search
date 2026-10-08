@@ -23,26 +23,26 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center text-center",
+        "flex animate-fade-up flex-col items-center text-center",
         size === "default" ? "gap-3 px-6 py-16" : "gap-2 px-4 py-8",
         className,
       )}
     >
       <span
         className={cn(
-          "flex items-center justify-center rounded-lg border border-border bg-background text-muted-foreground",
-          size === "default" ? "mb-1 size-11" : "size-9",
+          "flex items-center justify-center rounded-full bg-primary-subtle text-primary-subtle-foreground",
+          size === "default" ? "mb-2 size-12" : "size-9",
         )}
       >
         <Icon aria-hidden className={size === "default" ? "size-5" : "size-4"} />
       </span>
-      <p className={cn("max-w-sm font-medium text-balance", size === "default" ? "text-lg" : "text-base")}>
+      <p className={cn("max-w-sm font-semibold tracking-[-0.01em] text-balance", size === "default" ? "text-lg" : "text-base")}>
         {title}
       </p>
       {description && (
         <div className="max-w-sm text-sm text-pretty text-muted-foreground">{description}</div>
       )}
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className={size === "default" ? "mt-3" : "mt-1"}>{action}</div>}
     </div>
   )
 }

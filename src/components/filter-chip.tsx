@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangleIcon, PlusIcon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, PlusIcon, SparklesIcon, XIcon } from "lucide-react"
 import { memo } from "react"
 import { CheckboxIndicator } from "@/components/checkbox-indicator"
 import {
@@ -29,6 +29,9 @@ type FilterChipProps = {
   /** Short explanation shown on hover/focus of a read-only chip (e.g. why an unsupported term is ignored). */
   hint?: string
   disabled?: boolean
+  /** Fade/rise in when it first appears (after a search). `index` staggers a row of chips by 40 ms each. */
+  animateIn?: boolean
+  index?: number
   className?: string
 }
 
@@ -46,6 +49,8 @@ export const FilterChip = memo(function FilterChip({
   unsupported = false,
   hint,
   disabled = false,
+  animateIn = false,
+  index = 0,
   className,
 }: FilterChipProps) {
   const body = (
@@ -66,11 +71,14 @@ export const FilterChip = memo(function FilterChip({
   return (
     <span
       data-unsupported={unsupported || undefined}
+      style={animateIn ? { animationDelay: `${index * 40}ms` } : undefined}
       className={cn(
-        "group/chip inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-md border border-border bg-background text-sm transition-colors max-sm:h-9",
-        "has-[[data-state=open]]:border-primary has-[[data-state=open]]:ring-2 has-[[data-state=open]]:ring-primary/15",
-        unsupported && "border-dashed border-warning/50 bg-warning-subtle/40",
+        "group/chip inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-full border border-border bg-card text-sm transition-[border-color,box-shadow,background-color] max-sm:h-9",
+        "hover:border-border-strong",
+        "has-[[data-state=open]]:border-primary/60 has-[[data-state=open]]:bg-primary-subtle has-[[data-state=open]]:ring-[3px] has-[[data-state=open]]:ring-primary/12",
+        unsupported && "border-dashed border-warning/50 bg-warning-subtle/40 hover:border-warning/70",
         disabled && "pointer-events-none opacity-50",
+        animateIn && "animate-chip-in",
         className,
       )}
     >
@@ -78,7 +86,7 @@ export const FilterChip = memo(function FilterChip({
         <Popover open={open} onOpenChange={onOpenChange}>
           <PopoverTrigger
             disabled={disabled}
-            className="flex min-w-0 items-center gap-1.5 pr-2 pl-2.5 outline-none hover:bg-accent focus-visible:bg-accent"
+            className="flex min-w-0 items-center gap-1.5 pr-2 pl-3 outline-none hover:bg-accent focus-visible:bg-accent"
           >
             {body}
           </PopoverTrigger>
@@ -90,14 +98,14 @@ export const FilterChip = memo(function FilterChip({
         <Tooltip>
           <TooltipTrigger asChild>
             {/* Focusable so keyboard users get the hint too. */}
-            <span tabIndex={0} className="flex min-w-0 items-center gap-1.5 pr-2 pl-2.5 outline-none focus-visible:bg-accent">
+            <span tabIndex={0} className="flex min-w-0 items-center gap-1.5 pr-2 pl-3 outline-none focus-visible:bg-accent">
               {body}
             </span>
           </TooltipTrigger>
           <TooltipContent>{hint}</TooltipContent>
         </Tooltip>
       ) : (
-        <span className="flex min-w-0 items-center gap-1.5 pr-2 pl-2.5">{body}</span>
+        <span className={cn("flex min-w-0 items-center gap-1.5 pl-3", onRemove ? "pr-1" : "pr-3")}>{body}</span>
       )}
       {onRemove && (
         <button
@@ -105,9 +113,11 @@ export const FilterChip = memo(function FilterChip({
           disabled={disabled}
           onClick={onRemove}
           aria-label={`Remove ${label} ${value}`}
-          className="flex w-7 shrink-0 items-center justify-center border-l border-border text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:bg-accent max-sm:w-9"
+          className="group/x flex w-8 shrink-0 items-center justify-center pr-1 text-muted-foreground outline-none max-sm:w-9"
         >
-          <XIcon className="size-3.5" />
+          <span className="flex size-5 items-center justify-center rounded-full transition-colors group-hover/x:bg-accent group-hover/x:text-foreground group-focus-visible/x:bg-accent group-focus-visible/x:ring-2 group-focus-visible/x:ring-ring/50">
+            <XIcon className="size-3" />
+          </span>
         </button>
       )}
     </span>
@@ -130,7 +140,7 @@ export function AddFilterChip({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         disabled={disabled}
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-dashed border-border-strong px-2.5 text-sm text-muted-foreground outline-none transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 data-[state=open]:border-primary data-[state=open]:text-foreground max-sm:h-9"
+        className="inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-border-strong px-3 text-sm text-muted-foreground outline-none transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 data-[state=open]:border-primary data-[state=open]:text-foreground max-sm:h-9"
       >
         <PlusIcon className="size-3.5" />
         Add filter
@@ -142,19 +152,48 @@ export function AddFilterChip({
   )
 }
 
-/** Wrapping row of chips with an accessible group label. */
+/**
+ * Wrapping row of chips with an accessible group label. `heading` adds the "✦ Understood" line above the
+ * chips (what the model read from the brief); `onClear` adds a quiet "Clear all" action beside it.
+ */
 export function FilterChipList({
   children,
   className,
   label = "Search filters",
+  heading,
+  onClear,
 }: {
   children: React.ReactNode
   className?: string
   label?: string
+  heading?: string
+  onClear?: () => void
 }) {
-  return (
-    <div role="group" aria-label={label} className={cn("flex flex-wrap items-center gap-2", className)}>
+  const chips = (
+    <div role="group" aria-label={label} className={cn("flex flex-wrap items-center gap-2", !heading && className)}>
       {children}
+    </div>
+  )
+  if (!heading) return chips
+  return (
+    <div className={className}>
+      <div className="mb-2.5 flex h-6 items-center justify-between gap-3">
+        <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <SparklesIcon aria-hidden className="size-3.5 text-primary" />
+          {heading}
+        </p>
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 max-sm:h-9"
+          >
+            <XIcon aria-hidden className="size-3" />
+            Clear all
+          </button>
+        )}
+      </div>
+      {chips}
     </div>
   )
 }
@@ -164,7 +203,7 @@ export function FilterChipsSkeleton({ count = 4 }: { count?: number }) {
   return (
     <div className="flex flex-wrap gap-2" aria-hidden>
       {Array.from({ length: count }, (_, i) => (
-        <Skeleton key={i} className={cn("h-8 rounded-md", widths[i % widths.length])} />
+        <Skeleton key={i} className={cn("h-8 rounded-full", widths[i % widths.length])} />
       ))}
     </div>
   )

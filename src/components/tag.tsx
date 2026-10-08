@@ -13,8 +13,8 @@ export function Tag({
     <span
       data-matched={matched || undefined}
       className={cn(
-        "inline-flex h-5 max-w-full shrink-0 items-center truncate rounded-[4px] border border-border px-1.5 text-xs text-muted-foreground",
-        matched && "border-transparent bg-primary-subtle text-primary-subtle-foreground",
+        "inline-flex h-6 max-w-full shrink-0 items-center truncate rounded-full border border-border px-2.5 text-xs text-muted-foreground",
+        matched && "border-transparent bg-primary-subtle font-medium text-primary-subtle-foreground",
         className,
       )}
       {...props}

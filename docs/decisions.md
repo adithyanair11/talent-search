@@ -88,8 +88,9 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
 - **Type scale replaces Tailwind's defaults** (`text-sm` = 13px, `text-base` = 14px body, `text-lg` = 16px)
   instead of adding new names. shadcn primitives then render at product density without edits. Inputs and
   textareas use `text-lg` below `md` so iOS Safari doesn't zoom on focus.
-- **`shadow-xs`/`shadow-sm` render nothing; `shadow-md+` all map to one overlay shadow.** This enforces
-  "hairline first, shadow only for overlays" without forking every shadcn component.
+- **`shadow-xs` renders nothing; `shadow-md+` all map to one overlay shadow.** This keeps shadcn's flat shadows
+  from appearing without forking every primitive. (Since the redesign, `shadow-sm` is a soft card lift; see
+  "Redesign" below.)
 - **shadcn's `--accent` stays a neutral hover surface.** The single brand hue is `--primary` (+ `--primary-subtle`
   for selection). Renaming would break shadcn primitives, so the trap is documented in design.md instead.
 - **Company logos sit on a white tile in both themes.** The vendored logos are designed for light backgrounds.
@@ -567,3 +568,39 @@ expected sets don't depend on the code under test.
 
   Still open:
   - (Info) Briefs written directly to the DB bypass the control-character check.
+
+## Redesign: LLM-tool look (design system only)
+
+- **Plus Jakarta Sans replaces Geist Sans; Geist Mono stays for ranks.** The references use a geometric sans
+  with a large x-height, round bowls and regular-weight display text. Jakarta matches that, is self-hosted
+  through `next/font`, ships tabular figures, and stays crisp at 13–14 px. Inter Tight and Figtree with
+  Instrument Serif were the alternatives; the user chose Jakarta.
+- **Warm stone neutrals with forest green, instead of cool grey with cobalt.** The references sit on a warm
+  off-white page with white cards and deep green for the active state. Green also reads as "match" for matched
+  skills. `--success` and `--primary` are both green, but they never appear on the same element type
+  (success = the "Open to work" pill; primary = actions, focus, selection).
+- **The gradient is a token (`--accent-gradient`) used in four places only:** the composer focus border, the
+  send button, the active thinking dot and the upgrade mark. A gradient everywhere stops meaning "AI is here".
+- **ThinkingSteps are timer-driven, not real progress.** `POST /api/search` is one request (LLM extraction,
+  then SQL) with no streaming. The steps advance at 0 / 0.7 / 1.5 / 2.3 s and the last one holds until the
+  response lands, so the UI never claims to be done early. Edited-filter runs skip the model, so they start at
+  "Finding people". Streaming real stages would change the API contract, which is out of scope.
+- **No match-% rings, although the references have them.** Ranking is a deterministic SQL score, not a
+  similarity percentage. Showing "72% match" would invent precision we don't have and imply the model judged
+  the candidate, which it never does.
+- **`CandidateCard` is the new result component; `CandidateRow` is its `row` appearance.** Existing pages
+  (shortlist detail, the virtualised result list) keep their imports and their hairline-divided
+  `CandidateList`. `SearchBar` is now a thin wrapper over the docked `Composer`. The real pages switch to the
+  new components in the next task.
+- **The dark variant is `&:where(.dark *, .theme-dark, .theme-dark *):not(:where(.theme-light, .theme-light *))`.**
+  This lets `/dev/design` render light and dark panes side by side (`.theme-light` / `.theme-dark` re-declare
+  the role tokens). The app itself still toggles `.dark` on `<html>` through next-themes. Overlays portal to
+  `<body>`, so they follow the global theme.
+- **The 375 px review uses iframes of `/dev/design?frame=1&theme=…`.** Breakpoints are viewport media
+  queries, so only a real 375 px viewport shows the true mobile layout (tab bar, drawers, stacked rows).
+- **The inline shortlist-menu preview on `/dev/design` is static markup.** A mounted cmdk list calls
+  `scrollIntoView` on its auto-selected item, which scrolled the page to that section on load. The interactive
+  copy lives in the popover, which only mounts when opened.
+- **The card shortlist button is revealed on hover only for fine pointers (`pointer-fine:`).** On touch it is
+  always visible. It is also always visible when the person is shortlisted, when its menu is open, or while a
+  change is pending.

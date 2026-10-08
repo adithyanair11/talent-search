@@ -28,7 +28,7 @@ export function ErrorState({
       <div
         role="alert"
         className={cn(
-          "flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive-subtle px-3 py-2 text-sm",
+          "flex items-center gap-2 rounded-xl border border-destructive/15 bg-destructive-subtle py-1.5 pr-1.5 pl-3 text-sm",
           className,
         )}
       >
@@ -45,14 +45,14 @@ export function ErrorState({
   }
 
   return (
-    <div role="alert" className={cn("flex flex-col items-center gap-3 px-6 py-16 text-center", className)}>
-      <span className="mb-1 flex size-11 items-center justify-center rounded-lg border border-destructive/20 bg-destructive-subtle text-destructive">
+    <div role="alert" className={cn("flex animate-fade-up flex-col items-center gap-3 px-6 py-16 text-center", className)}>
+      <span className="mb-2 flex size-12 items-center justify-center rounded-full bg-destructive-subtle text-destructive">
         <AlertCircleIcon aria-hidden className="size-5" />
       </span>
-      <p className="text-lg font-medium">{title}</p>
+      <p className="text-lg font-semibold tracking-[-0.01em]">{title}</p>
       {message && <p className="max-w-sm text-sm text-pretty text-muted-foreground">{message}</p>}
       {onRetry && (
-        <Button variant="outline" onClick={onRetry} disabled={retrying} className="mt-2">
+        <Button variant="outline" onClick={onRetry} disabled={retrying} className="mt-3">
           <RotateCwIcon className={cn(retrying && "animate-spin")} />
           {retrying ? "Retrying…" : "Retry"}
         </Button>

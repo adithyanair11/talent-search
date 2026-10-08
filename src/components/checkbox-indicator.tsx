@@ -10,12 +10,12 @@ export function CheckboxIndicator({ checked, className }: { checked: boolean; cl
     <span
       aria-hidden
       className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-border-strong transition-colors",
+        "flex size-4 shrink-0 items-center justify-center rounded-full border border-border-strong transition-colors",
         checked && "border-primary bg-primary text-primary-foreground",
         className,
       )}
     >
-      {checked && <CheckIcon className="size-3 text-current" />}
+      {checked && <CheckIcon className="size-2.5 text-current" strokeWidth={3} />}
     </span>
   )
 }

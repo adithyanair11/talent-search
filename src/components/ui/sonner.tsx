@@ -22,9 +22,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 72px)" }}
       toastOptions={{
         classNames: {
-          toast: "!text-sm !font-sans !shadow-lg !gap-2",
+          toast: "!text-sm !font-sans !shadow-lg !gap-2 !rounded-xl",
           description: "!text-muted-foreground",
-          actionButton: "!bg-primary !text-primary-foreground !rounded-md !font-medium",
+          actionButton: "!bg-primary !text-primary-foreground !rounded-full !font-medium",
         },
       }}
       icons={{
