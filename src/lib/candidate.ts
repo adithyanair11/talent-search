@@ -69,6 +69,20 @@ export function initials(name: string): string {
   return (first + last).toUpperCase()
 }
 
+/**
+ * Length of a role from whole years (the data has no months): "3 yrs", "< 1 yr" for a role that started and
+ * ended in the same year. A current role (`end = null`) runs to `currentYear`.
+ */
+export function formatDuration(start: number, end: number | null, currentYear = new Date().getFullYear()): string {
+  return formatYears(Math.max(0, (end ?? currentYear) - start))
+}
+
+/** Matched skills first (stable within each group), so the sheet and rows lead with what the search asked for. */
+export function orderSkills(skills: string[], matched?: ReadonlySet<string>): string[] {
+  if (!matched || matched.size === 0) return skills
+  return [...skills.filter((s) => matched.has(s)), ...skills.filter((s) => !matched.has(s))]
+}
+
 /** Split skills into the first `max` visible ones and an overflow count. */
 export function topSkills(skills: string[], max = 3): { visible: string[]; overflow: number } {
   return { visible: skills.slice(0, max), overflow: Math.max(0, skills.length - max) }

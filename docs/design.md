@@ -143,11 +143,16 @@ top 3 skills plus an overflow count, and a shortlist button.
 - On mobile, the title and company stack on two lines and the skills wrap.
 
 ### CandidateSheet — `candidate-sheet.tsx`
-Candidate detail. A 480px right `Sheet` from 768px up, a bottom `Drawer` (92dvh, scrolls inside) below that.
-- `status`: `pending` → `CandidateProfileSkeleton`, `error` → `ErrorState` with Retry, `success` →
-  `CandidateProfile` (header with a 64px avatar, actions slot, Skills, Experience with 32px logos and year
-  ranges, Education).
-- `actions` slot: one primary (shortlist) plus outline secondaries.
+Candidate detail. A 480px right `Sheet` from 768px up, a full-height bottom `Drawer` (scrolls inside) below that.
+- `status`: `pending` → `CandidateProfileSkeleton`, `error` → `ErrorState` (Retry when `onRetry` is given;
+  omit it for "not found"), `success` → `CandidateProfile`: a header with a 64px avatar, name, headline, current
+  company, location, years and the actions slot; an Experience timeline (32px logos on a hairline rail, year range ·
+  duration, description); Education; Skills (matched skills first, tinted, with a "N match your search" note).
+- Toolbar: an optional previous/next stepper (`onPrevious`/`onNext`, `null` = disabled at that end,
+  `positionLabel` "3 of 120") and Close. 44px targets on mobile.
+- `actions` slot: one primary (shortlist) plus outline secondaries. In the header from 768px up, and a sticky
+  bottom bar on mobile.
+- The sheet focuses itself on open, so Esc and the owner's ←/→ binding work straight away.
 - Import it with **`next/dynamic`** from feature code. It is heavy and opened on demand.
 
 ### CandidateAvatar / CompanyLogo — `candidate-avatar.tsx`, `company-logo.tsx`

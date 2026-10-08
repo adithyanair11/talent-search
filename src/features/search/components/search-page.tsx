@@ -9,6 +9,9 @@ import { ErrorState } from "@/components/error-state"
 import { SearchBar } from "@/components/search-bar"
 import { toast, toastUndo } from "@/components/toast"
 import { Button } from "@/components/ui/button"
+import { CandidateSheetContainer } from "@/features/people/components/candidate-sheet-container"
+import { usePrefetchPerson } from "@/features/people/hooks"
+import { usePersonParam } from "@/features/people/use-person-param"
 import { useUpgradeStore } from "@/features/plan/store"
 import { ApiError } from "@/lib/api-client"
 import { formatCorrection, type Filters } from "@/lib/schemas/filters"
@@ -38,6 +41,8 @@ export function SearchPage() {
   const badId = raw !== null && searchId === null
 
   const pagesQuery = useSearchPages(searchId)
+  const person = usePersonParam()
+  const prefetchPerson = usePrefetchPerson()
   const run = useRunSearch()
   const openUpgrade = useUpgradeStore((s) => s.open)
   const lastEdited = useSearchUiStore((s) => s.lastEdited)
@@ -46,6 +51,7 @@ export function SearchPage() {
   const pages = pagesQuery.data?.pages
   const current = pages?.[0]
   const results = useMemo(() => pages?.flatMap((p) => p.results) ?? [], [pages])
+  const resultIds = useMemo(() => results.map((r) => r.id), [results])
 
   // The brief field follows the search in the URL (refresh, back/forward), without clobbering typing.
   const [brief, setBrief] = useState("")
@@ -200,6 +206,9 @@ export function SearchPage() {
             nextPageError={pagesQuery.isFetchNextPageError}
             fetchNextPage={loadMore}
             matchedSkills={matchedSkills}
+            selectedId={person.personId}
+            onOpen={person.open}
+            onPrefetch={prefetchPerson}
           />
         )}
       </div>
@@ -232,6 +241,16 @@ export function SearchPage() {
         </p>
       </div>
       {body}
+      <CandidateSheetContainer
+        personId={person.personId}
+        onClose={person.close}
+        onStep={person.step}
+        ids={resultIds}
+        total={current?.total}
+        hasMore={pagesQuery.hasNextPage}
+        onLoadMore={loadMore}
+        matchedSkills={matchedSkills}
+      />
     </div>
   )
 }

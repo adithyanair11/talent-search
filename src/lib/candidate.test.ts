@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatLocation, formatYearRange, formatYears, initials, topSkills } from "./candidate"
+import { formatDuration, formatLocation, formatYearRange, formatYears, initials, orderSkills, topSkills } from "./candidate"
 
 describe("candidate formatters", () => {
   it("formats location", () => {
@@ -29,5 +29,19 @@ describe("candidate formatters", () => {
   it("splits top skills", () => {
     expect(topSkills(["a", "b", "c", "d", "e"])).toEqual({ visible: ["a", "b", "c"], overflow: 2 })
     expect(topSkills(["a"], 3)).toEqual({ visible: ["a"], overflow: 0 })
+  })
+
+  it("formats role durations from whole years", () => {
+    expect(formatDuration(2020, 2024)).toBe("4 yrs")
+    expect(formatDuration(2023, 2024)).toBe("1 yr")
+    expect(formatDuration(2024, 2024)).toBe("< 1 yr")
+    expect(formatDuration(2022, null, 2026)).toBe("4 yrs")
+    expect(formatDuration(2027, null, 2026)).toBe("< 1 yr")
+  })
+
+  it("orders matched skills first, keeping relative order", () => {
+    expect(orderSkills(["A", "B", "C", "D"], new Set(["C", "A"]))).toEqual(["A", "C", "B", "D"])
+    expect(orderSkills(["A", "B"], new Set())).toEqual(["A", "B"])
+    expect(orderSkills(["A", "B"])).toEqual(["A", "B"])
   })
 })

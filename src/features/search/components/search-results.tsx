@@ -5,7 +5,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { CandidateList, CandidateRow, CandidateRowSkeleton } from "@/components/candidate-row"
 import { ErrorState } from "@/components/error-state"
 import type { SearchResult } from "@/lib/schemas/search"
-import { useSearchUiStore } from "../store"
 
 /** Load the next page when the last rendered row is this close to the end of what's loaded. */
 const PREFETCH_ROWS = 8
@@ -21,6 +20,9 @@ export function SearchResults({
   nextPageError,
   fetchNextPage,
   matchedSkills,
+  selectedId,
+  onOpen,
+  onPrefetch,
 }: {
   results: SearchResult[]
   hasNextPage: boolean
@@ -28,11 +30,13 @@ export function SearchResults({
   nextPageError: boolean
   fetchNextPage: () => void
   matchedSkills: ReadonlySet<string>
+  /** The candidate open in the sheet. */
+  selectedId: string | null
+  onOpen: (id: string) => void
+  onPrefetch: (id: string) => void
 }) {
   const listRef = useRef<HTMLDivElement>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
-  const selectedId = useSearchUiStore((s) => s.selectedId)
-  const select = useSearchUiStore((s) => s.select)
 
   // The list's offset from the top of the page, kept current as content above it (chips, notes) changes.
   useLayoutEffect(() => {
@@ -60,6 +64,12 @@ export function SearchResults({
     }
   }, [lastIndex, results.length, hasNextPage, isFetchingNextPage, nextPageError, fetchNextPage])
 
+  // Keep the open candidate in view as the sheet steps through results (no-op when it already is).
+  const selectedIndex = selectedId === null ? -1 : results.findIndex((r) => r.id === selectedId)
+  useEffect(() => {
+    if (selectedIndex >= 0) virtualizer.scrollToIndex(selectedIndex, { align: "auto" })
+  }, [selectedIndex, virtualizer])
+
   return (
     <>
       <CandidateList ref={listRef} className="relative" style={{ height: virtualizer.getTotalSize() }}>
@@ -77,7 +87,8 @@ export function SearchResults({
                 <CandidateRow
                   candidate={candidate}
                   rank={item.index + 1}
-                  onOpen={select}
+                  onOpen={onOpen}
+                  onPrefetch={onPrefetch}
                   selected={candidate.id === selectedId}
                   matchedSkills={matchedSkills}
                   priority={item.index < 2}

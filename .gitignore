@@ -26,3 +26,6 @@ supabase/.branches
 *.pem
 npm-debug.log*
 .vercel
+
+# playwright mcp screenshots/logs
+/.playwright-mcp/

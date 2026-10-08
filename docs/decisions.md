@@ -359,5 +359,24 @@ expected sets don't depend on the code under test.
   not compute them.
 - **Infinite paging calls `fetchNextPage({ cancelRefetch: false })`.** The virtualizer can ask again before
   `isFetchingNextPage` flips, and the default cancels and re-sends the page in flight.
-- **Row click only highlights the row for now** (`selectedId` in the search UI store). The candidate sheet arrives
-  with `GET /api/people/{id}`. Shortlisting from rows arrives with the shortlists feature.
+- **Shortlisting from rows arrives with the shortlists feature.**
+
+## Candidate profile (`GET /api/people/{id}`, CandidateSheet)
+
+- **A malformed id is a 404, not a 400.** The contract says "404 for unknown/invalid id", and a 404 doesn't hint at
+  the id format. Ids must match `^cand_[0-9]+$` (the table's check constraint) before any query runs.
+- **The jsonb `experiences` / `education` columns are zod-parsed on the way out**, so a bad row becomes a 500, never
+  a malformed payload. The response is `CandidateDetail` (the same shape the UI types use).
+- **The open candidate lives in the URL (`?p=<id>`), next to `?s=`.** Opening pushes a history entry, so Back closes
+  the sheet. Stepping with ←/→ replaces the entry, so Back still closes instead of walking through every profile.
+  Closing pops the entry we pushed, or strips `p` when the page was opened from a link, so it never navigates
+  off-site. This uses the native History API, which Next keeps in sync with `useSearchParams` without a server
+  round trip. The callbacks read `window.location`, so they are stable and memoized rows don't re-render on open.
+  The `selectedId` store field was removed: the URL is the only source of truth.
+- **Profiles are cached with `staleTime: Infinity`.** Candidates are seeded and read-only. Hovering or focusing a
+  row prefetches the profile and the sheet's `next/dynamic` chunk. While a profile is open, its previous and next
+  neighbours are prefetched, so stepping is instant. Within 3 of the loaded end, the next results page loads.
+- **The sheet focuses itself on open**, not its first button. Esc and ←/→ work at once, and the stepper tooltip
+  doesn't flash. Arrow keys are ignored in inputs and when a modifier is held.
+- **Role durations use whole years** (the data has no months): a role that starts and ends in the same year is
+  "< 1 yr", and a current role runs to the current year.

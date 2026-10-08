@@ -20,6 +20,8 @@ type CandidateRowProps = {
   rank?: number
   /** Open in the side sheet. Receives the id so the parent can pass a stable callback. */
   onOpen: (id: string) => void
+  /** Warm the profile before it's opened (hover / keyboard focus). Receives the id; pass a stable callback. */
+  onPrefetch?: (id: string) => void
   /** Currently open in the sheet. */
   selected?: boolean
   shortlisted?: boolean
@@ -38,6 +40,7 @@ export const CandidateRow = memo(function CandidateRow({
   candidate: c,
   rank,
   onOpen,
+  onPrefetch,
   selected = false,
   shortlisted = false,
   shortlistPending = false,
@@ -53,6 +56,8 @@ export const CandidateRow = memo(function CandidateRow({
   return (
     <article
       aria-current={selected || undefined}
+      onPointerEnter={onPrefetch && (() => onPrefetch(c.id))}
+      onFocus={onPrefetch && (() => onPrefetch(c.id))}
       className={cn(
         "group/row relative flex gap-3 px-4 py-4 transition-colors sm:gap-4 sm:px-5",
         "hover:bg-accent/60 has-[button[data-row-open]:focus-visible]:bg-accent/60",
