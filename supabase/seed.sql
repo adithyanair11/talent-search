@@ -1,0 +1,3 @@
+-- Seed data applied by `npx supabase db reset`.
+-- Companies only (acme, globex); they are inserted once the schema migration exists.
+-- Recruiters and candidates are seeded by scripts/seed.ts.
