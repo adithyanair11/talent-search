@@ -124,6 +124,11 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
 - **Sign-in/out run in the browser with the Supabase browser client** (it writes the auth cookies). Sign-out uses
   `scope: "local"` (this browser only) and clears the React Query cache, so nothing from one company is shown to
   the next recruiter on the same tab. The 401 handler in the QueryClient sends an expired session to `/login`.
+- **Auth UI resets itself when hidden, because routes are kept alive.** With `cacheComponents`, Next 16 keeps
+  visited routes mounted in a hidden `<Activity>` and shows the same instance again, state included. Without the
+  reset, `/login` came back after sign-out still showing "Signing in…" with the button disabled until a reload, and
+  the account menu reopened on the next sign-in. `LoginForm` and `AccountMenu` therefore reset their mutation (and
+  clear the password, or close the menu) in an effect cleanup, which React runs when `<Activity>` hides them.
 - **Demo credentials are shown on the login page.** No sign-up or reset is in scope, so graders need a way in. The
   accounts and password are the ones `scripts/seed.ts` creates for the local stack only. They grant nothing beyond
   the local demo.
@@ -484,3 +489,81 @@ expected sets don't depend on the code under test.
   quota in the search status row from `sm` up. Below `sm`, the top-bar badge sits directly above the search bar,
   so it isn't repeated. The UpgradeDialog says Pro = an active Stripe subscription for your company, with no
   checkout. `useRunSearch` already invalidates `["plan"]` on settle, and saved-search re-runs go through it.
+
+## Security pass (headers, rate limit, hostile input, probes)
+
+- **Security headers live in `next.config.ts` `headers()`**, on every path: CSP, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` (old browsers; CSP
+  `frame-ancestors 'none'` is the real control), `Permissions-Policy` (no camera/mic/geolocation), and
+  `poweredByHeader: false`.
+- **CSP:** `default-src 'self'`; `connect-src` adds only the Supabase origin (the browser calls it only for
+  sign-in/out); `img-src` adds `https://rotto.com` **and** `https://www.rotto.com`. The data's avatar/logo URLs are
+  SVGs on rotto.com, which `next/image` passes through unoptimized, and rotto.com redirects to www. The browser
+  follows the redirect and CSP checks the final URL (found in a browser check: every image was blocked without
+  www). `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`, `object-src 'none'`. Dev adds
+  `'unsafe-eval'` (React dev tooling) and `ws:` (HMR) only.
+- **`script-src 'self' 'unsafe-inline'`, no nonce: a deliberate tradeoff.** A nonce must differ per response, so
+  every page would render per request, which throws away `cacheComponents`' prerendered static shells. Next's RSC
+  payload and next-themes' anti-flash script are inline scripts. What we rely on instead: React escapes all
+  rendered data, there is no `dangerouslySetInnerHTML` with data, scripts load only from `'self'`, and objects,
+  base-URI tricks, form exfiltration and framing are all closed.
+- **Rate limit: `POST /api/search`, per recruiter (`userId`), in memory** (`src/server/rate-limit.ts`): a token
+  bucket of 30 that refills at 1/s. That's far above human use, keeps `test:quota`'s 25 concurrent requests
+  intact, and caps how fast one account can burn LLM spend. It runs first in `runSearch`, before the plan read,
+  the LLM and `run_search`, so a 429 (`rate_limited`, `Retry-After` = seconds until a token) consumes nothing.
+  Per process, so N instances allow N×; a shared store (Redis/Postgres) would be needed for that, and the free
+  quota is enforced in SQL regardless. `scripts/lib/api.ts` waits out a 429 (up to 3 retries), so `eval`/`bench`
+  never fail on it. Tests reset the limiter between cases.
+- **Free text must be storable:** briefs and free-text filter strings (`unsupported`, `preferences`, `corrections`,
+  `interpretation`) reject C0 control characters (tab/LF/CR allowed), DEL and lone UTF-16 surrogates → 400. Before
+  this, a NUL reached Postgres (`22P05`) and a lone surrogate reached PostgREST as invalid JSON (`PGRST102`): both
+  were 500s. The schema is shared, so saved briefs are covered too.
+- **`run_search` refuses a match set of everyone** (migration `run_search_guards`): when the matched count equals
+  the candidate count it raises `PT422`, so nothing is stored and no quota is consumed, and the API answers 422
+  "These filters match every candidate…". "Never return everyone" is now enforced on the result, not only on the
+  input. That covers any constraint that narrows nothing: `years_experience: {max: 15}` (the data's maximum)
+  passed the schema and returned all 5,000, and a direct RPC with `min: -100` did too. It also rejects years
+  outside 0–50 or min > max (`22023`), matching the API schema for direct RPC callers.
+- **Hostile suite (`src/app/api/search/hostile.test.ts`):** the LLM is stubbed as a worst case, a model that obeys
+  the brief and echoes attacker text into every field. Covers SQL/prompt-injection briefs, 10k/1 MB bodies, emoji,
+  zero-width, NUL, control, RTL and lone-surrogate input, every malformed filters shape, hostile paging params and
+  cross-tenant paging. Every response must be 4xx or a bounded 200, with no stack/SQL text. The attacker is a
+  throwaway company + recruiter created and deleted by the test, because the suites run in parallel and acme's and
+  globex's plans/counters belong to `route.test.ts` and `plan/route.test.ts`. Row counts of tables no other suite
+  writes are compared before/after; searches must equal the number of 200s.
+- **`probe:security` coverage:**
+  - Every table × select/insert/update/delete with only the publishable key, plus raw PostgREST `fetch`es.
+  - `run_search` called directly: the quota holds (PT402, nothing consumed); vacuous, malformed or off-vocabulary
+    filters are refused or return 0; a smuggled `company_id` is ignored.
+  - `search_page`/`apply_stripe_event`/private functions: each must be refused with a specific code, not just
+    return 0 rows.
+  - Attempts to move a row to the other company on every writable table, and globex deletes by
+    `person_id`/`company_id`.
+  - Every API route × {no token, publishable key as Bearer, junk JWT, Basic, a real user with no recruiter row}
+    → 401 JSON without internals.
+  - Before/after row counts of all 9 tables.
+  - A malformed person id is a 404 by design (indistinguishable from unknown), not a 400.
+- **Independent review (security-reviewer agent):** no Critical/High. Fixed:
+  - The rate limit now runs *after* the 402 pre-check, so an exhausted free plan always answers 402 (the
+    contract), never 429.
+  - The post-login `?next=` is resolved with `new URL()` and must keep the same origin
+    (`src/features/auth/safe-next.ts`). The old regex let `/\t/evil.example` through, because URL parsing strips
+    the tab.
+  - The webhook caps `created` at 15 digits, so an over-long value is a 400, not a 500 that Stripe would retry.
+
+  Fixed in a follow-up (migration `run_search_limits_shortlist_key`):
+  - (Medium) **`run_search` enforces the API schema's limits itself**, because recruiters can call it directly
+    through PostgREST: filters ≤ 32 KB, only known top-level keys, lists ≤ 20 items, notes ≤ 10, every string
+    ≤ 300 chars → `22023`. Before, 1,500 `preferences` ran scoring into the 8 s statement timeout on every call (rolled
+    back, so free to repeat), and a 2 MB `p_filters` was stored verbatim. Both are now refused in < 0.1 s. A
+    worst-case valid search (all 13 roles, 20 skills, 10 long preferences) takes ~0.15 s. The API can't hit these
+    limits: `normalizeFilters` ends in `filtersSchema.parse`.
+  - (Low) **`shortlist_people` key is `(shortlist_id, company_id, person_id)`.** With `(shortlist_id, person_id)`,
+    an upsert with ignore-duplicates into another company's list matched that company's row before the foreign
+    key was checked: 201 for a member, 409 for a non-member. `company_id` always defaults to the caller's company,
+    so another company's row can't be the conflict target, and member and non-member get the same answer.
+    Uniqueness is unchanged in practice (a shortlist has exactly one company); `addPerson` uses the new conflict
+    target. Both are covered by `probe:security`.
+
+  Still open:
+  - (Info) Briefs written directly to the DB bypass the control-character check.

@@ -149,7 +149,7 @@ export async function addPerson(ctx: RequestContext, shortlistId: string, person
   // ON CONFLICT DO NOTHING: needs only the insert grant; a repeat returns no row.
   const { data, error } = await ctx.supabase
     .from('shortlist_people')
-    .upsert({ shortlist_id: shortlistId, person_id: personId }, { onConflict: 'shortlist_id,person_id', ignoreDuplicates: true })
+    .upsert({ shortlist_id: shortlistId, person_id: personId }, { onConflict: 'shortlist_id,company_id,person_id', ignoreDuplicates: true })
     .select('person_id')
   if (error?.code === '23503') throw new HttpError('not_found', 'Candidate not found.')
   if (error) fail('shortlist add', error)

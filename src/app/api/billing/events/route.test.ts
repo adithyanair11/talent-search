@@ -71,6 +71,8 @@ describe.skipIf(!reachable)('POST /api/billing/events (local Supabase)', () => {
     expect((await send('not json')).status).toBe(400)
     expect((await send('[]')).status).toBe(400)
     expect((await send(JSON.stringify({ id: `evt_${TAG}_x`, type: 'x' }))).status).toBe(400)
+    // More digits than the DB function accepts: a 400, not a 500 that Stripe would retry.
+    expect((await send(JSON.stringify({ id: `evt_${TAG}_big`, type: 'x', created: 1e15 }))).status).toBe(400)
   })
 
   it('applies, dedupes and ignores stale events (by event.created, not arrival)', async () => {

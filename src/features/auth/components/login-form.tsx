@@ -3,11 +3,12 @@
 import type { Route } from "next"
 import { CircleAlertIcon, Loader2Icon } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "../demo-accounts"
+import { safeNextPath } from "../safe-next"
 import { type SignInError, useSignIn } from "../hooks"
 
 const MESSAGES: Record<SignInError, string> = {
@@ -16,10 +17,8 @@ const MESSAGES: Record<SignInError, string> = {
   unknown: "Sign-in failed for an unexpected reason. Try again.",
 }
 
-/** Only same-origin paths, never `//host` or `/\host` (open-redirect guard). */
 function safeNext(): Route {
-  const next = new URLSearchParams(window.location.search).get("next")
-  return (next && /^\/(?![/\\])/.test(next) ? next : "/search") as Route
+  return safeNextPath(new URLSearchParams(window.location.search).get("next"), window.location.origin) as Route
 }
 
 export function LoginForm() {
@@ -31,6 +30,18 @@ export function LoginForm() {
   const emailId = useId()
   const passwordId = useId()
   const errorId = useId()
+
+  // With cacheComponents, Next keeps this route mounted (hidden in <Activity>) after we navigate away and shows the
+  // same instance again on sign-out. Effects are cleaned up when it is hidden, so wipe the finished sign-in there;
+  // otherwise the form comes back stuck on "Signing in…" with the previous password filled in.
+  const { reset } = signIn
+  useEffect(
+    () => () => {
+      reset()
+      setPassword("")
+    },
+    [reset],
+  )
 
   const error = signIn.error ? MESSAGES[signIn.error] : null
   const pending = signIn.isPending || signIn.isSuccess

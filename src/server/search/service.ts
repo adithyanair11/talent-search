@@ -8,6 +8,7 @@ import type { Database } from '@/lib/database.types'
 import type { RequestContext } from '../auth'
 import { extractFiltersCached, FilterExtractionError } from '../llm/extract-filters'
 import { getPlan } from '../plan'
+import { searchRateLimiter } from '../rate-limit'
 import { filtersToExtraction, normalizeFilters } from './normalize'
 
 /**
@@ -19,6 +20,7 @@ import { filtersToExtraction, normalizeFilters } from './normalize'
 type PageRow = Database['public']['Functions']['search_page']['Returns'][number]
 
 const QUOTA_MESSAGE = "You've used your free search. Upgrade to keep searching."
+const TOO_BROAD_MESSAGE = 'These filters match every candidate. Add a role, skill, level, location or education.'
 export const BUSY_MESSAGE = 'Search is busy, please try again'
 export const BUSY_RETRY_AFTER_SECONDS = 2
 
@@ -63,9 +65,18 @@ async function fetchPage(ctx: RequestContext, searchId: string, page: number): P
 
 export async function runSearch(ctx: RequestContext, input: SearchRequest): Promise<SearchResponse> {
   // Cheap pre-check so an exhausted free plan gets its 402 before we pay for an LLM call. run_search enforces
-  // the limit atomically; this only short-circuits the common case.
+  // the limit atomically; this only short-circuits the common case. It runs before the rate limit so an exhausted
+  // plan always answers 402 (the contract), never 429.
   const plan = await getPlan(ctx)
   if (plan.plan === 'free' && plan.searches_remaining === 0) throw new HttpError('payment_required', QUOTA_MESSAGE)
+
+  // Per-recruiter rate limit, before the LLM call or anything that consumes quota.
+  const retryAfter = searchRateLimiter.take(ctx.userId)
+  if (retryAfter > 0) {
+    throw new HttpError('rate_limited', 'Too many searches at once. Wait a moment and try again.', {
+      retryAfterSeconds: retryAfter,
+    })
+  }
 
   const filters = await resolveFilters(input)
 
@@ -75,6 +86,7 @@ export async function runSearch(ctx: RequestContext, input: SearchRequest): Prom
   if (error) {
     if (error.code === 'PT402') throw new HttpError('payment_required', QUOTA_MESSAGE)
     if (error.code === '22023') throw new HttpError('unprocessable', 'These filters cannot be searched.')
+    if (error.code === 'PT422') throw new HttpError('unprocessable', TOO_BROAD_MESSAGE)
     throw new Error(`run_search failed: ${error.code} ${error.message}`)
   }
 

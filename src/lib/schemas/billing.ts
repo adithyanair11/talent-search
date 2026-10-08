@@ -8,7 +8,9 @@ export const stripeEventSchema = z
   .object({
     id: z.string().min(1).max(255),
     type: z.string().min(1).max(255),
-    created: z.number().int().nonnegative(),
+    // Unix seconds. apply_stripe_event accepts at most 15 digits; anything longer is malformed (400 here), not a
+    // 500 that Stripe would retry forever.
+    created: z.number().int().nonnegative().max(999_999_999_999_999),
   })
   .loose()
 

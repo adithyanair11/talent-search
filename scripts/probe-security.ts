@@ -7,24 +7,44 @@
  * tables (searches, subscriptions, stripe_events) are created with the admin client, since no recruiter can
  * write them. All fixtures are removed at the end.
  *
- * Run with `npm run probe:security` (local Supabase must be running and seeded). Exits 1 on any failure.
+ * Also: every table × verb with only the publishable key, run_search/search_page/apply_stripe_event called
+ * directly, every API route without a usable identity, and before/after row counts of every table.
+ *
+ * Run with `npm run probe:security` (local Supabase must be running and seeded; `make dev` for the API checks).
+ * Exits 1 on any failure.
  */
 import './lib/env'
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
 import type { Database } from '../src/lib/database.types'
 import { getSupabaseAdmin } from '../src/server/supabase-admin'
+import { API_BASE as APP_BASE, newClient, PASSWORD, signIn, withCompanyState } from './lib/api'
 import { requireEnv } from './lib/env'
 
-type Client = SupabaseClient<Database>
-type Result = { data: unknown; error: { message: string } | null }
+type Result = { data: unknown; error: { message: string; code?: string } | null }
+type Table = keyof Database['public']['Tables']
 
 const URL = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
 const PUBLISHABLE_KEY = requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
-const API_BASE = process.env.PROBE_BASE_URL ?? 'http://localhost:3000'
-const PASSWORD = 'rotto-assessment'
+const API_BASE = process.env.PROBE_BASE_URL ?? APP_BASE
 const TAG = `probe-${Date.now()}`
+
+/** Every table in `public`, with the column that identifies a row (for update/delete probes). */
+const TABLES: Record<Table, string> = {
+  companies: 'id',
+  recruiters: 'user_id',
+  candidates: 'id',
+  searches: 'id',
+  shortlists: 'id',
+  shortlist_people: 'shortlist_id',
+  saved_briefs: 'id',
+  subscriptions: 'stripe_subscription_id',
+  stripe_events: 'event_id',
+}
+
+/** Internals that would show the caller how the server or database is built. */
+const LEAKS = /"stack"|\bat [\w.<>]+ \(.*:\d+:\d+\)|SQLSTATE|syntax error|relation "|violates|PGRST\d|plpgsql|failed:/i
 
 const results: { status: 'PASS' | 'FAIL' | 'SKIP'; area: string; name: string; detail: string }[] = []
 
@@ -45,6 +65,12 @@ async function blocked(area: string, name: string, query: PromiseLike<Result>): 
   else record(n === 0, area, name, `${n} row(s)`)
 }
 
+/** The call must be refused outright (an error), with one of the expected codes. */
+async function refused(area: string, name: string, query: PromiseLike<Result>, codes: string[]): Promise<void> {
+  const { error } = await query
+  record(!!error && codes.includes(error.code ?? ''), area, name, error ? `${error.code}: ${error.message}` : 'no error')
+}
+
 /** Control: acme's own legitimate access must succeed. */
 async function allowed(area: string, name: string, query: PromiseLike<Result>, minRows = 1): Promise<void> {
   const { data, error } = await query
@@ -53,17 +79,14 @@ async function allowed(area: string, name: string, query: PromiseLike<Result>, m
   else record(n >= minRows, area, name, `${n} row(s)`)
 }
 
-function newClient(): Client {
-  return createClient<Database>(URL, PUBLISHABLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-}
-
-async function signIn(email: string): Promise<{ client: Client; token: string; userId: string }> {
-  const client = newClient()
-  const { data, error } = await client.auth.signInWithPassword({ email, password: PASSWORD })
-  if (error || !data.session) throw new Error(`sign-in failed for ${email}: ${error?.message}`)
-  return { client, token: data.session.access_token, userId: data.user.id }
+async function tableCounts(admin: ReturnType<typeof getSupabaseAdmin>): Promise<Record<Table, number>> {
+  const out = {} as Record<Table, number>
+  for (const table of Object.keys(TABLES) as Table[]) {
+    const { count, error } = await admin.from(table).select('*', { count: 'exact', head: true })
+    if (error) throw new Error(`count ${table}: ${error.message}`)
+    out[table] = count ?? 0
+  }
+  return out
 }
 
 function must<T>(step: string, res: { data: T; error: { message: string } | null }): NonNullable<T> {
@@ -136,6 +159,32 @@ async function main(): Promise<void> {
     'acme shortlist',
     await acme.client.from('shortlists').insert({ name: `${TAG} acme` }).select().single(),
   )
+  const aBrief = must(
+    'acme saved brief',
+    await acme.client.from('saved_briefs').insert({ brief: `${TAG} acme`, filters: {} }).select().single(),
+  )
+  const aSearch = must(
+    'acme search',
+    await admin
+      .from('searches')
+      .insert({
+        company_id: acmeCompany.id,
+        recruiter_id: acme.userId,
+        brief: `${TAG} acme`,
+        filters: {},
+        result_ids: ['cand_0001', 'cand_0002'],
+        total: 2,
+      })
+      .select()
+      .single(),
+  )
+  // A real, signed-in Supabase user who is nobody's recruiter: must get nothing anywhere.
+  const strayEmail = `${TAG}@stray.test`
+  const created = await admin.auth.admin.createUser({ email: strayEmail, password: PASSWORD, email_confirm: true })
+  if (created.error) throw new Error(`stray user: ${created.error.message}`)
+  const stray = created.data
+  const strayToken = (await signIn(strayEmail)).token
+  const before = await tableCounts(admin)
 
   try {
     const a = acme.client
@@ -186,6 +235,7 @@ async function main(): Promise<void> {
     await blocked('searches', 'select by globex company_id', a.from('searches').select().eq('company_id', G))
     await blocked('searches', 'update globex', a.from('searches').update({ result_ids: [] }).eq('id', gSearch.id).select())
     await blocked('searches', 'delete globex', a.from('searches').delete().eq('id', gSearch.id).select())
+    await blocked('searches', 'move own to globex', a.from('searches').update({ company_id: G }).eq('id', aSearch.id).select())
     await blocked(
       'searches',
       'insert own (bypass quota)',
@@ -234,6 +284,34 @@ async function main(): Promise<void> {
       a.from('shortlist_people').insert({ shortlist_id: aShortlist.id, person_id: 'cand_0002', company_id: G }).select(),
     )
     await blocked('shortlist_people', 'remove from globex list', a.from('shortlist_people').delete().eq('shortlist_id', gShortlist.id).select())
+    await blocked('shortlist_people', 'delete globex rows by person_id', a.from('shortlist_people').delete().eq('person_id', 'cand_0001').neq('shortlist_id', aShortlist.id).select())
+    await blocked('shortlist_people', 'delete by globex company_id', a.from('shortlist_people').delete().eq('company_id', G).select())
+    // Membership oracle: an upsert into the globex list must answer the same whether or not the candidate is on
+    // it. Before the (shortlist_id, company_id, person_id) key, a member got 201 and a non-member 409.
+    for (const onConflict of ['shortlist_id,person_id', 'shortlist_id,company_id,person_id']) {
+      const answer = async (personId: string) => {
+        const res = await fetch(`${URL}/rest/v1/shortlist_people?on_conflict=${onConflict}`, {
+          method: 'POST',
+          headers: {
+            apikey: PUBLISHABLE_KEY,
+            Authorization: `Bearer ${acme.token}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=ignore-duplicates',
+          },
+          body: JSON.stringify({ shortlist_id: gShortlist.id, person_id: personId }),
+        })
+        const body = (await res.json().catch(() => null)) as { code?: string } | null
+        return `${res.status} ${body?.code ?? ''}`.trim()
+      }
+      const member = await answer('cand_0001')
+      const nonMember = await answer('cand_0004')
+      record(
+        member === nonMember && !member.startsWith('2'),
+        'shortlist_people',
+        `upsert oracle (on_conflict=${onConflict}) answers alike`,
+        `member ${member} · non-member ${nonMember}`,
+      )
+    }
     await allowed('shortlist_people', 'control: add to own list', a.from('shortlist_people').insert({ shortlist_id: aShortlist.id, person_id: 'cand_0002' }).select())
     await blocked(
       'shortlist_people',
@@ -246,25 +324,116 @@ async function main(): Promise<void> {
     await blocked('saved_briefs', 'insert with globex company_id', a.from('saved_briefs').insert({ brief: 'x', filters: {}, company_id: G }).select())
     await blocked('saved_briefs', 'update globex', a.from('saved_briefs').update({ brief: 'pwned' }).eq('id', gBrief.id).select())
     await blocked('saved_briefs', 'delete globex', a.from('saved_briefs').delete().eq('id', gBrief.id).select())
+    await blocked('saved_briefs', 'move own to globex', a.from('saved_briefs').update({ company_id: G } as never).eq('id', aBrief.id).select())
+    await allowed('saved_briefs', 'control: select own', a.from('saved_briefs').select().eq('id', aBrief.id))
 
     // ---- private functions are not exposed ----------------------------------------------------------
-    await blocked('rpc', 'current_company_id', a.rpc('current_company_id' as never))
-    await blocked('rpc', 'company_is_paid(globex)', a.rpc('company_is_paid' as never, { p_company_id: G } as never))
-    await blocked('rpc', 'private schema table access', a.schema('private' as never).from('recruiters' as never).select())
+    // PGRST202 = no such function in the exposed schemas; PGRST106 = schema not exposed; 42501 = no privilege.
+    const NOT_CALLABLE = ['PGRST202', 'PGRST106', '42501']
+    await refused('rpc', 'current_company_id', a.rpc('current_company_id' as never), NOT_CALLABLE)
+    await refused('rpc', 'company_is_paid(globex)', a.rpc('company_is_paid' as never, { p_company_id: G } as never), NOT_CALLABLE)
+    await refused('rpc', 'private.current_company_id', a.schema('private' as never).rpc('current_company_id' as never), NOT_CALLABLE)
+    await refused('rpc', 'private.company_is_paid(globex)', a.schema('private' as never).rpc('company_is_paid' as never, { p_company_id: G } as never), NOT_CALLABLE)
+    await refused('rpc', 'private schema table access', a.schema('private' as never).from('recruiters' as never).select(), NOT_CALLABLE)
 
-    // ---- anon (no token) ----------------------------------------------------------------------------
-    for (const table of [
-      'companies', 'recruiters', 'candidates', 'searches', 'shortlists', 'shortlist_people', 'saved_briefs',
-      'subscriptions', 'stripe_events',
-    ] as const) {
-      await blocked('anon', `select ${table}`, anon.from(table).select())
+    // ---- anon (publishable key only, no user token): every table × every verb ---------------------------
+    // Untyped: column names differ per table, which the typed builder can't express in one loop.
+    const untypedAnon = createClient(URL, PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+    for (const [table, key] of Object.entries(TABLES) as [Table, string][]) {
+      const t = untypedAnon.from(table)
+      const row: Record<string, string> = { [key]: `${TAG}-anon` }
+      await blocked('anon', `select ${table}`, t.select())
+      await blocked('anon', `insert ${table}`, t.insert(row).select())
+      await blocked('anon', `update ${table}`, t.update(row).not(key, 'is', null).select())
+      await blocked('anon', `delete ${table}`, t.delete().not(key, 'is', null).select())
+      // The same read without supabase-js: raw PostgREST with just the apikey header.
+      const res = await fetch(`${URL}/rest/v1/${table}?select=*`, { headers: { apikey: PUBLISHABLE_KEY } })
+      const body = await res.text()
+      record(!res.ok || body.trim() === '[]', 'anon', `raw GET /rest/v1/${table}`, `${res.status} ${body.slice(0, 60)}`)
     }
 
     // ---- search functions ---------------------------------------------------------------------------
     await blocked('rpc', 'search_page(globex search)', a.rpc('search_page', { p_search_id: gSearch.id, p_page: 1 }))
+    await blocked('rpc', 'search_page(globex search, page 2)', a.rpc('search_page', { p_search_id: gSearch.id, p_page: 2 }))
+    await allowed('rpc', 'control: search_page(own search)', a.rpc('search_page', { p_search_id: aSearch.id, p_page: 1 }), 2)
+    {
+      const res = await fetch(`${URL}/rest/v1/rpc/run_search`, {
+        method: 'POST',
+        headers: { apikey: PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_brief: 'x', p_filters: { roles: ['Recruiter'] } }),
+      })
+      record(!res.ok, 'rpc', 'raw anon POST /rest/v1/rpc/run_search', `${res.status}`)
+    }
     await blocked('rpc', 'anon run_search', anon.rpc('run_search', { p_brief: 'x', p_filters: { roles: ['Recruiter'] } }))
     await blocked('rpc', 'anon search_page(globex search)', anon.rpc('search_page', { p_search_id: gSearch.id, p_page: 1 }))
     await blocked('rpc', 'jsonb_text_array (private helper)', a.rpc('jsonb_text_array' as never, { arr: [] } as never))
+
+    // ---- run_search called directly (skips the route's LLM, zod and normalizer) ------------------------
+    const candidateTotal = before.candidates
+    await withCompanyState('acme', 'free', `${TAG}_free`, async ({ id }) => {
+      await admin.from('companies').update({ searches_used: 1 }).eq('id', id)
+      await refused(
+        'run_search',
+        'free plan, quota used → PT402',
+        a.rpc('run_search', { p_brief: `${TAG} direct`, p_filters: { roles: ['Backend Engineer'] } }),
+        ['PT402'],
+      )
+      const used = (await admin.from('companies').select('searches_used').eq('id', id).single()).data?.searches_used
+      const made = (await admin.from('searches').select('id').eq('brief', `${TAG} direct`)).data?.length
+      record(used === 1 && made === 0, 'run_search', 'refused call consumed nothing', `used=${used} searches=${made}`)
+    })
+    await withCompanyState('acme', 'paid', `${TAG}_paid`, async ({ id }) => {
+      const hostile: [string, unknown][] = [
+        ['no constraints', {}],
+        ['only unsupported', { unsupported: ['speaks Klingon'] }],
+        ['only preferences', { preferences: ['likes Go'] }],
+        ['off-vocabulary role', { roles: ["' OR 1=1 --"] }],
+        ['wrong types', { roles: 'Backend Engineer', years_experience: { min: '-5' }, open_to_work: 'yes' }],
+        ['negative years', { years_experience: { min: -100 } }],
+        ['inverted years', { years_experience: { min: 10, max: 2 } }],
+        ['vacuous years (max = data maximum)', { years_experience: { max: 15 } }],
+        ['vacuous years (huge max)', { years_experience: { max: 1000 } }],
+        ['unknown keys only', { company_id: G, admin: true }],
+        ['filters as array', [{ roles: ['Backend Engineer'] }]],
+      ]
+      for (const [label, filters] of hostile) {
+        const { data, error } = await a.rpc('run_search', { p_brief: `${TAG} ${label}`, p_filters: filters as never })
+        const total = (data as { total: number }[] | null)?.[0]?.total
+        record(!!error || total === 0, 'run_search', `${label} → refused or 0 results`, error ? `${error.code}` : `total=${total}`)
+      }
+      const { data, error } = await a.rpc('run_search', {
+        p_brief: `${TAG} smuggle`,
+        p_filters: { roles: ['Backend Engineer'], company_id: G } as never,
+      })
+      const row = (data as { search_id: string; total: number }[] | null)?.[0]
+      if (error || !row) {
+        record(true, 'run_search', 'smuggled company_id → refused', `${error?.code ?? 'no row'}`)
+      } else {
+        const owner = (await admin.from('searches').select('company_id').eq('id', row.search_id).single()).data?.company_id
+        record(owner === id && row.total < candidateTotal, 'run_search', 'smuggled company_id → stored as acme, bounded', `owner=${owner === id ? 'acme' : owner} total=${row.total}`)
+      }
+      // Size/shape limits (the API's zod schema doesn't protect direct RPC callers). Must be refused fast: before
+      // the limits, 1500 preferences ran scoring into the 8 s statement timeout on every call.
+      const limits: [string, unknown][] = [
+        ['1500 preferences', { roles: ['Backend Engineer'], preferences: Array.from({ length: 1500 }, (_, i) => `p${i}`) }],
+        ['21 skills', { skills_any: Array.from({ length: 21 }, (_, i) => `s${i}`) }],
+        ['2 MB filters', { roles: ['Backend Engineer'], interpretation: 'z'.repeat(2_000_000) }],
+        ['unknown key', { roles: ['Backend Engineer'], junk: 'x' }],
+        ['301-char string', { roles: ['Backend Engineer'], unsupported: ['u'.repeat(301)] }],
+        ['nested long string', { roles: ['Backend Engineer'], corrections: [{ from: 'a', to: 'b'.repeat(301) }] }],
+      ]
+      for (const [label, filters] of limits) {
+        const started = performance.now()
+        const { error } = await a.rpc('run_search', { p_brief: `${TAG} ${label}`, p_filters: filters as never })
+        const ms = Math.round(performance.now() - started)
+        record(error?.code === '22023' && ms < 2000, 'run_search', `${label} → 22023, fast`, `${error?.code ?? 'no error'} in ${ms} ms`)
+      }
+      await allowed(
+        'run_search',
+        'control: valid filters',
+        a.rpc('run_search', { p_brief: `${TAG} control`, p_filters: { roles: ['Backend Engineer'] } }),
+      )
+    })
 
     // ---- billing: only the service role may apply Stripe events ---------------------------------------
     const forged = {
@@ -293,6 +462,7 @@ async function main(): Promise<void> {
       searchId: gSearch.id,
       briefId: gBrief.id,
     })
+    await probeApiAuth({ ownShortlistId: aShortlist.id, ownBriefId: aBrief.id, ownSearchId: aSearch.id, strayToken })
 
     // ---- globex fixtures and counters unchanged -----------------------------------------------------
     const after = {
@@ -318,8 +488,17 @@ async function main(): Promise<void> {
       after.recruiters?.find((r) => r.user_id === acme.userId)?.company_id === acmeCompany.id &&
       after.candidate?.full_name !== 'pwned'
     record(intact, 'integrity', 'globex fixtures, companies, recruiters, candidates unchanged', intact ? 'ok' : JSON.stringify(after))
+    // Row counts of every table: unchanged except the one control insert (acme adds cand_0002 to its own list).
+    const now = await tableCounts(admin)
+    for (const table of Object.keys(TABLES) as Table[]) {
+      const expected = before[table] + (table === 'shortlist_people' ? 1 : 0)
+      record(now[table] === expected, 'integrity', `row count ${table}`, `${before[table]} → ${now[table]}`)
+    }
   } finally {
     await acme.client.from('shortlists').delete().eq('id', aShortlist.id)
+    await acme.client.from('saved_briefs').delete().eq('id', aBrief.id)
+    await admin.from('searches').delete().eq('id', aSearch.id)
+    await admin.auth.admin.deleteUser(stray.user.id)
     await globex.client.from('shortlists').delete().eq('id', gShortlist.id)
     await globex.client.from('saved_briefs').delete().eq('id', gBrief.id)
     await admin.from('searches').delete().eq('id', gSearch.id)
@@ -380,6 +559,13 @@ async function probeApi(
     },
     { name: 'control: GET /api/saved-briefs', method: 'GET', path: '/api/saved-briefs', expect: 200 },
     { name: 'page globex search', method: 'GET', path: `/api/search/${ids.searchId}?page=1` },
+    { name: 'page globex search, page 2', method: 'GET', path: `/api/search/${ids.searchId}?page=2` },
+    { name: 'globex search, no page', method: 'GET', path: `/api/search/${ids.searchId}` },
+    // A malformed id is answered like an unknown one (404) by design: see api/people/[id]/route.ts.
+    { name: 'person id injection', method: 'GET', path: `/api/people/${encodeURIComponent("cand_0001' or '1'='1")}`, expect: 404 },
+    { name: 'unknown person', method: 'GET', path: '/api/people/cand_999999', expect: 404 },
+    { name: 'control: GET /api/people/cand_0001', method: 'GET', path: '/api/people/cand_0001', expect: 200 },
+    { name: 'control: GET /api/plan', method: 'GET', path: '/api/plan', expect: 200 },
     {
       name: 'webhook without Stripe signature (recruiter token)',
       method: 'POST',
@@ -412,6 +598,63 @@ async function probeApi(
     if (c.mustNotContain) record(res.ok && !body.includes(c.mustNotContain), 'api', c.name, `${res.status}`)
     else if (c.expect !== undefined) record(res.status === c.expect, 'api', c.name, `${res.status}`)
     else record(res.status === 404 || res.status === 403, 'api', c.name, `${res.status}`)
+  }
+}
+
+/**
+ * Every route and method without a usable identity: no token, the publishable key as a Bearer, junk tokens, and a
+ * real signed-in user who isn't a recruiter. All must be a 401 JSON error, before any work and without internals.
+ */
+async function probeApiAuth(ids: { ownShortlistId: string; ownBriefId: string; ownSearchId: string; strayToken: string }): Promise<void> {
+  const routes: [string, string, unknown?][] = [
+    ['POST', '/api/search', { brief: `${TAG} unauth`, filters: { roles: ['Backend Engineer'] } }],
+    ['GET', `/api/search/${ids.ownSearchId}?page=1`],
+    ['GET', '/api/people/cand_0001'],
+    ['GET', '/api/shortlists'],
+    ['POST', '/api/shortlists', { name: `${TAG} unauth` }],
+    ['GET', `/api/shortlists/${ids.ownShortlistId}`],
+    ['PATCH', `/api/shortlists/${ids.ownShortlistId}`, { name: 'pwned' }],
+    ['DELETE', `/api/shortlists/${ids.ownShortlistId}`],
+    ['POST', `/api/shortlists/${ids.ownShortlistId}/people/cand_0003`],
+    ['DELETE', `/api/shortlists/${ids.ownShortlistId}/people/cand_0002`],
+    ['GET', '/api/saved-briefs'],
+    ['POST', '/api/saved-briefs', { brief: `${TAG} unauth`, filters: {} }],
+    ['DELETE', `/api/saved-briefs/${ids.ownBriefId}`],
+    ['GET', '/api/plan'],
+  ]
+  const identities: [string, Record<string, string>][] = [
+    ['no token', {}],
+    ['publishable key as Bearer', { Authorization: `Bearer ${PUBLISHABLE_KEY}` }],
+    ['junk JWT', { Authorization: 'Bearer abc.def.ghi' }],
+    ['Basic auth', { Authorization: 'Basic YWRtaW46YWRtaW4=' }],
+    ['user with no recruiter row', { Authorization: `Bearer ${ids.strayToken}` }],
+  ]
+  for (const [who, headers] of identities) {
+    const failures: string[] = []
+    for (const [method, path, body] of routes) {
+      let res: Response
+      try {
+        res = await fetch(API_BASE + path, {
+          method,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          redirect: 'manual',
+          signal: AbortSignal.timeout(10_000),
+        })
+      } catch {
+        record('skip', 'api-auth', who, `server not reachable at ${API_BASE}`)
+        return
+      }
+      const text = await res.text()
+      let code: unknown
+      try {
+        code = JSON.parse(text)?.error?.code
+      } catch {
+        code = undefined
+      }
+      if (res.status !== 401 || code !== 'unauthorized' || LEAKS.test(text)) failures.push(`${method} ${path} → ${res.status}`)
+    }
+    record(failures.length === 0, 'api-auth', `${who}: ${routes.length} routes → 401`, failures.join('; ') || 'all 401')
   }
 }
 

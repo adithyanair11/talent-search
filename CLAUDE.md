@@ -41,7 +41,8 @@ All routes except billing accept `Authorization: Bearer <supabase access token>`
 | `POST /api/billing/events` | Stripe webhook, no recruiter token. 400 bad signature, 200 otherwise (incl. repeats). |
 
 Errors: JSON `{ error: { code, message } }` with correct status (400/401/402/404/409/422/500, and 503
-`search_unavailable` + `Retry-After` when the LLM is slow/down — nothing consumed). Never leak stack traces or SQL.
+`search_unavailable` + `Retry-After` when the LLM is slow/down — nothing consumed; 429 `rate_limited` + `Retry-After`
+on `POST /api/search` bursts — nothing consumed). Never leak stack traces or SQL.
 
 ## Architecture
 

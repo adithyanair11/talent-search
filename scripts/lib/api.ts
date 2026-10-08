@@ -56,14 +56,25 @@ export async function api<T = unknown>(
   path: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {
-  const started = performance.now()
-  const res = await fetch(API_BASE + path, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  const json = (await res.json().catch(() => null)) as T
-  return { status: res.status, body: json, ms: Math.round(performance.now() - started) }
+  // POST /api/search is rate limited per recruiter (docs/decisions.md "Security pass"). Scripts that fire many
+  // searches wait out a 429 instead of failing; `ms` times only the attempt that answered.
+  for (let attempt = 1; ; attempt++) {
+    const started = performance.now()
+    const res = await fetch(API_BASE + path, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const ms = Math.round(performance.now() - started)
+    if (res.status === 429 && attempt < 4) {
+      await res.body?.cancel()
+      const waitSeconds = Number(res.headers.get('retry-after')) || 1
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000))
+      continue
+    }
+    const json = (await res.json().catch(() => null)) as T
+    return { status: res.status, body: json, ms }
+  }
 }
 
 /**

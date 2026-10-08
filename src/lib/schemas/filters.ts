@@ -29,7 +29,18 @@ const MAX_UNSUPPORTED = 10
 const MAX_NOTE = 200
 const MAX_INTERPRETATION = 300
 
-export const briefSchema = z.string().trim().min(1).max(BRIEF_MAX_LENGTH)
+// Postgres text/jsonb can't hold NUL (22P05) and PostgREST rejects lone surrogates as invalid JSON, so either would
+// surface as a 500. Other C0 controls have no business in a brief. Tab, LF and CR are allowed.
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/
+const isPlainText = (s: string) => s.isWellFormed() && !CONTROL_CHARS.test(s)
+const PLAIN_TEXT_MESSAGE = 'must not contain control characters or invalid unicode'
+
+/** User-supplied free text, trimmed, `min`–`max` chars, safe to store. */
+function text(min: number, max: number) {
+  return z.string().trim().min(min).max(max).refine(isPlainText, PLAIN_TEXT_MESSAGE)
+}
+
+export const briefSchema = text(1, BRIEF_MAX_LENGTH)
 
 export const SCOPES = ['any', 'current'] as const
 
@@ -70,16 +81,16 @@ export const filtersSchema = z
     degrees: list(z.enum(DEGREES)),
     schools: list(z.enum(SCHOOLS)),
     fields_of_study: list(z.enum(FIELDS_OF_STUDY)),
-    unsupported: z.array(z.string().trim().min(1).max(MAX_NOTE)).max(MAX_UNSUPPORTED),
+    unsupported: z.array(text(1, MAX_NOTE)).max(MAX_UNSUPPORTED),
     /** Typos the server corrected ("Andriod" → "Android"). Informational: the corrected value is in its field. */
     corrections: z
       .array(
-        z.object({ from: z.string().trim().min(1).max(MAX_NOTE), to: z.string().trim().min(1).max(MAX_NOTE) }).strict(),
+        z.object({ from: text(1, MAX_NOTE), to: text(1, MAX_NOTE) }).strict(),
       )
       .max(MAX_UNSUPPORTED),
     /** Nice-to-haves ("ideally …"). Informational only — never a constraint, never narrows results. */
-    preferences: z.array(z.string().trim().min(1).max(MAX_NOTE)).max(MAX_UNSUPPORTED),
-    interpretation: z.string().trim().max(MAX_INTERPRETATION),
+    preferences: z.array(text(1, MAX_NOTE)).max(MAX_UNSUPPORTED),
+    interpretation: text(0, MAX_INTERPRETATION),
   })
   .partial()
   .strict()

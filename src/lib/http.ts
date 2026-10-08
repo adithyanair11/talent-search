@@ -11,6 +11,8 @@ export const ERROR_STATUS = {
   not_found: 404,
   conflict: 409,
   unprocessable: 422,
+  /** Too many searches in a short time (per-recruiter token bucket). Sent with `Retry-After`. */
+  rate_limited: 429,
   internal: 500,
   /** A dependency (the LLM) is slow or down; nothing was consumed. Sent with `Retry-After`. */
   search_unavailable: 503,

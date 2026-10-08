@@ -5,10 +5,11 @@
  * created here are restored / removed afterwards.
  */
 import { createClient } from '@supabase/supabase-js'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Database } from '@/lib/database.types'
 import { FilterExtractionError } from '@/server/llm/extract-filters'
+import { SEARCH_RATE_CAPACITY, searchRateLimiter } from '@/server/rate-limit'
 import { getSupabaseAdmin } from '@/server/supabase-admin'
 
 import { GET } from './[searchId]/route'
@@ -88,6 +89,8 @@ describe.skipIf(!reachable)('/api/search (local Supabase)', () => {
     if (error) throw new Error(error.message)
   })
 
+  beforeEach(() => searchRateLimiter.reset())
+
   afterAll(async () => {
     await admin.from('subscriptions').delete().eq('stripe_subscription_id', fixtureSub)
     await admin.from('searches').delete().like('brief', `${TAG}%`)
@@ -108,6 +111,8 @@ describe.skipIf(!reachable)('/api/search (local Supabase)', () => {
       { brief: `${TAG} x`, filters: { roles: ['Wizard'] } },
       { brief: `${TAG} x`, filters: { roles: 'Backend Engineer' } },
       { brief: `${TAG} x`, filters: BACKEND, extra: true },
+      { brief: `${TAG} x\u0000`, filters: BACKEND },
+      { brief: `${TAG} x`, filters: { ...BACKEND, preferences: ['a\u0000'] } },
     ]) {
       const res = await post(globex, body)
       expect(res.status, JSON.stringify(body)).toBe(400)
@@ -181,6 +186,29 @@ describe.skipIf(!reachable)('/api/search (local Supabase)', () => {
     expect(blocked.status).toBe(402)
     expect((await blocked.json()).error.code).toBe('payment_required')
     expect(await used(acmeId)).toBe(1)
+  })
+
+  it('429 + Retry-After once the per-recruiter burst is spent; nothing consumed, other recruiters unaffected', async () => {
+    const globexUser = JSON.parse(Buffer.from(globex.split('.')[1], 'base64url').toString()).sub as string
+    for (let i = 0; i < SEARCH_RATE_CAPACITY; i++) searchRateLimiter.take(globexUser)
+    const brief = `${TAG} rate limited`
+    const res = await post(globex, { brief, filters: BACKEND })
+    expect(res.status).toBe(429)
+    expect(Number(res.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1)
+    expect((await res.json()).error.code).toBe('rate_limited')
+    const { count } = await admin.from('searches').select('id', { count: 'exact', head: true }).eq('brief', brief)
+    expect(count).toBe(0)
+
+    await setUsed(acmeId, 0)
+    expect((await post(acme, { brief: `${TAG} other recruiter`, filters: BACKEND })).status).toBe(200)
+  })
+
+  it('an exhausted free plan answers 402, never 429, even after its rate-limit burst is spent', async () => {
+    const acmeUser = JSON.parse(Buffer.from(acme.split('.')[1], 'base64url').toString()).sub as string
+    await setUsed(acmeId, 1)
+    for (let i = 0; i < SEARCH_RATE_CAPACITY; i++) searchRateLimiter.take(acmeUser)
+    const res = await post(acme, { brief: `${TAG} exhausted`, filters: BACKEND })
+    expect(res.status).toBe(402)
   })
 
   it.each([
