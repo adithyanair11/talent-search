@@ -71,7 +71,12 @@ export function ShortlistMenuContent({
                     >
                       <CheckboxIndicator checked={on} />
                       <span className="min-w-0 flex-1 truncate">{l.name}</span>
-                      <span className="text-xs text-muted-foreground tabular-nums">{l.count}</span>
+                      <span aria-hidden className="text-xs text-muted-foreground tabular-nums">
+                        {l.count}
+                      </span>
+                      <span className="sr-only">
+                        , {l.count} {l.count === 1 ? "person" : "people"}
+                      </span>
                     </CommandItem>
                   )
                 })}

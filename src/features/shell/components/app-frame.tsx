@@ -1,7 +1,7 @@
 "use client"
 
 import type { Route } from "next"
-import { BookmarkIcon, HistoryIcon, RotateCwIcon, SearchIcon } from "lucide-react"
+import { BookmarkIcon, RotateCwIcon, SearchIcon, StarIcon } from "lucide-react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -29,7 +29,7 @@ const UpgradeDialog = dynamic(() => import("@/components/upgrade-dialog").then((
 const NAV: { href: Route; label: string; short: string; icon: React.ReactNode }[] = [
   { href: "/search", label: "Search", short: "Search", icon: <SearchIcon aria-hidden /> },
   { href: "/shortlists", label: "Shortlists", short: "Shortlists", icon: <BookmarkIcon aria-hidden /> },
-  { href: "/saved", label: "Saved searches", short: "Saved", icon: <HistoryIcon aria-hidden /> },
+  { href: "/saved", label: "Saved searches", short: "Saved", icon: <StarIcon aria-hidden /> },
 ]
 
 function isActive(pathname: string, href: string) {

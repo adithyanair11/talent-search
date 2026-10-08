@@ -159,7 +159,7 @@ The brief input, styled like an LLM composer. It is controlled: the owner holds 
 - **`variant="docked"`** (default; above results): a single-row box with the send button inside, ⌘K hint
   when empty, and auto-grow up to 160px.
 - **`meta`**: a quiet line under the box (centred in the hero, right-aligned when docked). The search page puts
-  `SearchQuota` here, so searches left always sit next to the composer.
+  `SearchQuota` here in the hero only, so the cost of the first search is clear before it runs.
 - **Keys:** Enter submits the trimmed brief, Shift+Enter adds a newline, Esc blurs. **⌘K / Ctrl+K and `/`**
   focus it (`globalShortcut`; exactly one composer per page owns it).
 - **States:**
@@ -335,7 +335,7 @@ Behaviour:
 1. **Empty state:** a `Composer variant="hero"` centred in the content column (vertically off-centre,
    ≈ 30% from the top), with `title` "Who are you looking for?", one line of sub-copy, and 3–4 example briefs
    as suggestions. Nothing else on the page.
-2. **Submit:** the composer becomes `variant="docked"`. The docked composer, the quota line and the filter
+2. **Submit:** the composer becomes `variant="docked"`. The docked composer and the filter
    chips form one sticky header (below the mobile top bar; at the top from `md`), so the understood filters are
    always visible and editable while results scroll. While the brief is read the chips are
    `FilterChipsSkeleton`; below the header, `ThinkingPanel` + `ThinkingSteps` (driven by
@@ -348,8 +348,9 @@ Behaviour:
    Chips don't re-animate. **Clear all** returns to the empty hero composer (nothing runs or is consumed).
 5. **Empty / unsupported / error:** EmptyState or ErrorState inside a 16px card, in place of the cards. Search
    errors are written for people: 503 "Search is taking a breather… nothing was used", 429, offline, other.
-6. **Quota:** the free plan's "✦ N free search left · Upgrade" sits under the composer (in the mobile docked
-   state the top bar's PlanBadge, directly above, carries it). A 402 opens the UpgradeDialog, never an error.
+6. **Quota:** the free plan's "✦ N free search left · Upgrade" sits under the hero composer. Once docked, the
+   shell's PlanBadge (sidebar footer from `md`, top bar below) carries it, so the sticky header isn't repeating it.
+   A 402 opens the UpgradeDialog, never an error.
 
 `/dev/design#flow` is a working mock of this sequence.
 

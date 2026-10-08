@@ -51,6 +51,12 @@ describe("editing", () => {
     expect(filtersSchema.safeParse(edited).success).toBe(true)
   })
 
+  it("shortens long lists to the first value and a count", () => {
+    expect(chipsFor({ roles: ["Frontend Engineer", "Backend Engineer", "Data Engineer"] })).toEqual([
+      { key: "roles", label: "Role", value: "Frontend Engineer +2" },
+    ])
+  })
+
   it("toggles list values", () => {
     expect(toggleValue(["React"], "Go")).toEqual(["React", "Go"])
     expect(toggleValue(["React", "Go"], "React")).toEqual(["Go"])

@@ -27,6 +27,11 @@ export const FILTER_LABELS: Record<ConstraintKey, string> = {
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+/** Chip text for a list: up to two values, then "+N" (the editor lists them all). */
+export function listValue(values: readonly string[]): string {
+  return values.length <= 2 ? values.join(", ") : `${values[0]} +${values.length - 1}`
+}
+
 export function formatYearsRange(r: { min?: number; max?: number }): string {
   if (r.min !== undefined && r.max !== undefined) return r.min === r.max ? `${r.min} yrs` : `${r.min}–${r.max} yrs`
   if (r.min !== undefined) return `${r.min}+ yrs`
@@ -42,11 +47,11 @@ function chipFor(key: ConstraintKey, f: Filters): Chip | null {
   const label = FILTER_LABELS[key]
   switch (key) {
     case "seniority":
-      return f.seniority ? { key, label, value: f.seniority.map(capitalize).join(", ") } : null
+      return f.seniority ? { key, label, value: listValue(f.seniority.map(capitalize)) } : null
     case "years_experience":
       return f.years_experience ? { key, label, value: formatYearsRange(f.years_experience) } : null
     case "locations":
-      return f.locations ? { key, label, value: f.locations.map(locationLabel).join(", ") } : null
+      return f.locations ? { key, label, value: listValue(f.locations.map(locationLabel)) } : null
     case "open_to_work":
       return f.open_to_work === undefined ? null : { key, label, value: f.open_to_work ? "Yes" : "No" }
     case "companies":
@@ -54,7 +59,7 @@ function chipFor(key: ConstraintKey, f: Filters): Chip | null {
         ? {
             key,
             label: f.companies.scope === "current" ? "Current company" : label,
-            value: f.companies.names.join(", "),
+            value: listValue(f.companies.names),
           }
         : null
     case "company_type":
@@ -67,7 +72,7 @@ function chipFor(key: ConstraintKey, f: Filters): Chip | null {
         : null
     default: {
       const values = f[key]
-      return values ? { key, label, value: values.join(", ") } : null
+      return values ? { key, label, value: listValue(values) } : null
     }
   }
 }

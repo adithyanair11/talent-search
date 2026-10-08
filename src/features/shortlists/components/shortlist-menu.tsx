@@ -76,7 +76,7 @@ export function ShortlistMenu({
     <Drawer open={open} onOpenChange={setOpen} nested={nested}>
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
       <DrawerContent onEscapeKeyDown={keepOpenOnLocalEscape}>
-        <DrawerHeader className="text-left">
+        <DrawerHeader className="text-left group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
           <DrawerTitle className="text-lg">Shortlist {person.full_name}</DrawerTitle>
           <DrawerDescription>Tick the lists they belong on.</DrawerDescription>
         </DrawerHeader>

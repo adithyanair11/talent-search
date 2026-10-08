@@ -67,6 +67,7 @@ export const CandidateCard = memo(function CandidateCard({
 
   return (
     <article
+      data-candidate-id={c.id}
       aria-current={selected || undefined}
       onPointerEnter={onPrefetch && (() => onPrefetch(c.id))}
       onFocus={onPrefetch && (() => onPrefetch(c.id))}

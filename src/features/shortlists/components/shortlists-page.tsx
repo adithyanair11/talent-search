@@ -10,7 +10,8 @@ import { useCreateShortlist, useDeleteShortlist, useShortlists } from "../hooks"
 import { NameForm } from "./name-form"
 import { ShortlistCard, ShortlistCardSkeleton } from "./shortlist-card"
 
-const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+// Same 3xl column as Search and Saved searches, so page titles line up across the app.
+const GRID = "grid gap-3 sm:grid-cols-2"
 const STATE_CARD = "rounded-2xl border border-border bg-card"
 
 /** /shortlists: every company list as a card, newest first, with create, inline rename and delete + undo. */
@@ -83,7 +84,7 @@ export function ShortlistsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 md:py-10">
+    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:py-10">
       <div className="mb-6 flex items-end justify-between gap-3 md:mb-8">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Shortlists</h1>

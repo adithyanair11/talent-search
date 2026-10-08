@@ -102,7 +102,13 @@ export const FilterChip = memo(function FilterChip({
         <button
           type="button"
           disabled={disabled}
-          onClick={onRemove}
+          onClick={(e) => {
+            // Keep keyboard users in the row: focus moves to the neighbouring chip instead of falling to <body>.
+            const chip = e.currentTarget.parentElement
+            const neighbour = (chip?.nextElementSibling ?? chip?.previousElementSibling)?.querySelector<HTMLElement>("button")
+            onRemove()
+            requestAnimationFrame(() => neighbour?.isConnected && neighbour.focus())
+          }}
           aria-label={`Remove ${label} ${value}`}
           className="group/x flex w-8 shrink-0 items-center justify-center pr-1 text-muted-foreground outline-none max-sm:w-9"
         >

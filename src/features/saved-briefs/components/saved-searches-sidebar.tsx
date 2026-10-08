@@ -1,6 +1,6 @@
 "use client"
 
-import { HistoryIcon, Loader2Icon } from "lucide-react"
+import { Loader2Icon, StarIcon } from "lucide-react"
 import Link from "next/link"
 import { SidebarItem, SidebarSection } from "@/components/app-shell"
 import { ErrorState } from "@/components/error-state"
@@ -46,7 +46,7 @@ export function SavedSearchesSidebar() {
         {saved.data.slice(0, SHOWN).map((s) => (
           <SidebarItem
             key={s.id}
-            icon={pendingId === s.id ? <Loader2Icon className="animate-spin" /> : <HistoryIcon />}
+            icon={pendingId === s.id ? <Loader2Icon className="animate-spin" /> : <StarIcon />}
             title={`Run: ${s.brief}`}
             disabled={pendingId !== null}
             onClick={() => run(s)}

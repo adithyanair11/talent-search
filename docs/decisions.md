@@ -755,3 +755,34 @@ the same numbers before and after. The eval is unchanged too (macro P/R/F1 1.000
     route's first on-demand compile in a freshly started `next dev`, never on a warm dev server, and the code
     path doesn't exist in production.
   It uses Playwright's Chromium when installed, otherwise the local Google Chrome, so it adds no setup step.
+
+## Product review pass (grader walkthrough, 375 / 1280, light / dark, keyboard)
+
+Walked sign in → search → edit / remove a chip → candidate → shortlist → new list → rename → delete → save →
+re-run → free limit → upgrade → sign out → Globex (no Acme lists, saved searches, list or search URLs visible).
+What changed and why:
+
+- **Focus never falls to `<body>`.** Every place that unmounted the focused control or opened a dialog without a
+  `DialogTrigger` lost the keyboard user's place. Fixed: the chip editor focuses its list once its lazy chunk
+  mounts (the filter input only with a fine pointer, so phones don't pop the keyboard over the list) and starts on
+  the first selected value; removing a chip moves focus to its neighbour; closing the candidate sheet returns to
+  that candidate's card (`data-candidate-id`), even after ←/→ stepping; renaming a list returns to its link;
+  "Save search" stays focusable once saved (`aria-disabled`, not `disabled`). `useRestoreFocus`
+  (`src/hooks/use-restore-focus.ts`) gives store-opened dialogs (UpgradeDialog, ConfirmDialog) "go back to the
+  opener", falling back to `<main>` when the opener is gone (a deleted list).
+- **Skip link.** "Skip to content" is the first tab stop and targets `<main id="main" tabindex="-1">`.
+- **Saved searches use a star, shortlists keep the bookmark.** Both used bookmarks, so a "Saved" search and a
+  "Shortlisted" candidate looked identical side by side.
+- **Long chip values read "Frontend Engineer +6"** (`listValue`) instead of seven names truncated mid-word; the
+  editor lists them all.
+- **Quota appears once per screen.** The docked header no longer repeats "searches left": the shell's PlanBadge
+  (sidebar footer / mobile top bar) carries it. The hero keeps it, to say what the first search costs. The
+  composer's meta slot collapses when empty, so Pro has no gap. Saved searches only mention the free plan to free
+  plans.
+- **The upgrade dialog says what counts as a search** (edits and saved-search re-runs do) and drops overlapping
+  benefits; the webhook note is one plain sentence.
+- **Screen readers:** the sheet announces the name and headline once (the visible copies are `aria-hidden`
+  beside the dialog's title and description); shortlist menu counts read "2 people".
+- **Alignment:** Shortlists uses the same `max-w-3xl` column as Search and Saved searches (2-up grid), and
+  bottom-drawer headers are left-aligned again (the vaul primitive's `text-center` beat `text-left`, leaving the
+  upgrade mark and text misaligned).

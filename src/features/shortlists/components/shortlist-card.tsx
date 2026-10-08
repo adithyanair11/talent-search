@@ -41,6 +41,16 @@ export const ShortlistCard = memo(function ShortlistCard({
   const rename = useRenameShortlist()
   // Closing the menu returns focus to its trigger, which would blur (and so end) the rename field.
   const keepFocus = useRef(false)
+  const linkRef = useRef<HTMLAnchorElement>(null)
+  // Enter / Esc unmount the field, which would drop focus to the page: put it back on the list's link. A blur-save
+  // (clicking elsewhere) leaves focus where the click put it.
+  const endRename = () => {
+    setRenaming(false)
+    requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (!active || active === document.body) linkRef.current?.focus()
+    })
+  }
 
   return (
     <div
@@ -56,16 +66,17 @@ export const ShortlistCard = memo(function ShortlistCard({
               initialName={list.name}
               exceptId={list.id}
               saveOnBlur
-              onCancel={() => setRenaming(false)}
+              onCancel={endRename}
               onSubmit={async (name) => {
                 await rename.mutateAsync({ id: list.id, name })
-                setRenaming(false)
+                endRename()
               }}
               className="relative z-10"
             />
           ) : (
             <h2 className="truncate text-base font-semibold tracking-[-0.005em]">
               <Link
+                ref={linkRef}
                 href={`/shortlists/${list.id}` as Route}
                 className="outline-none after:absolute after:inset-0 after:rounded-[inherit] after:content-['']"
               >

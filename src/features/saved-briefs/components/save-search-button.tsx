@@ -1,6 +1,6 @@
 "use client"
 
-import { BookmarkCheckIcon, BookmarkIcon, Loader2Icon } from "lucide-react"
+import { Loader2Icon, StarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Filters } from "@/lib/schemas/filters"
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useIsSaved, useSaveBrief } from "../hooks"
 
 /**
- * "Save search" next to the result count: an outline pill with icon + label, tinted "Saved" once saved (the
+ * "Save search" next to the result count: an outline pill with a star + label (a star, not the shortlist bookmark), tinted "Saved" once saved (the
  * toast offers View). Saves the brief the results are for plus the filters as currently
  * edited. Disabled (with a tooltip saying why) until there is a search; shows "Saved" once this exact search is.
  */
@@ -27,7 +27,7 @@ export function SaveSearchButton({ brief, filters }: { brief?: string; filters?:
             className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <Button variant="outline" size="sm" disabled className="max-sm:h-10" tabIndex={-1}>
-              <BookmarkIcon aria-hidden />
+              <StarIcon aria-hidden />
               Save search
             </Button>
           </span>
@@ -37,24 +37,25 @@ export function SaveSearchButton({ brief, filters }: { brief?: string; filters?:
     )
   }
 
+  // Stays focusable once saved (aria-disabled, not disabled) so keyboard focus isn't dropped to the page.
+  const inert = saved || save.isPending
   return (
     <Button
       variant="outline"
       size="sm"
       className={cn(
         "max-sm:h-10",
-        saved && "border-primary/25 bg-primary-subtle text-primary-subtle-foreground disabled:opacity-100 dark:bg-primary-subtle",
+        saved && "border-primary/25 bg-primary-subtle text-primary-subtle-foreground hover:bg-primary-subtle hover:text-primary-subtle-foreground dark:bg-primary-subtle",
       )}
-      disabled={saved || save.isPending}
-      aria-label={saved ? "Search saved" : undefined}
-      onClick={() => save.mutate({ brief, filters })}
+      aria-disabled={inert || undefined}
+      onClick={() => {
+        if (!inert) save.mutate({ brief, filters })
+      }}
     >
       {save.isPending ? (
         <Loader2Icon aria-hidden className="animate-spin" />
-      ) : saved ? (
-        <BookmarkCheckIcon aria-hidden />
       ) : (
-        <BookmarkIcon aria-hidden />
+        <StarIcon aria-hidden className={cn(saved && "fill-current")} />
       )}
       {saved ? "Saved" : "Save search"}
     </Button>

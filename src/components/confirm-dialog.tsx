@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,6 +19,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useIsDesktop } from "@/hooks/use-media-query"
+import { useRestoreFocus } from "@/hooks/use-restore-focus"
 
 /**
  * Confirmation for a destructive action that is hard to take back (deleting a whole shortlist). A Dialog from
@@ -39,12 +41,16 @@ export function ConfirmDialog({
   onConfirm: () => void
 }) {
   const isDesktop = useIsDesktop()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  // Opened from a menu item that is gone by now: focus goes back to the menu's trigger, or <main> if the row
+  // itself was deleted.
+  const focusProps = useRestoreFocus(cancelRef)
   const confirm = () => {
     onConfirm()
     onOpenChange(false)
   }
   const cancel = (
-    <Button variant="outline" autoFocus onClick={() => onOpenChange(false)}>
+    <Button ref={cancelRef} variant="outline" onClick={() => onOpenChange(false)}>
       Cancel
     </Button>
   )
@@ -57,7 +63,7 @@ export function ConfirmDialog({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent role="alertdialog" showCloseButton={false} className="gap-5 sm:max-w-sm">
+        <DialogContent role="alertdialog" showCloseButton={false} className="gap-5 sm:max-w-sm" {...focusProps}>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
@@ -73,8 +79,8 @@ export function ConfirmDialog({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent role="alertdialog">
-        <DrawerHeader className="text-left">
+      <DrawerContent role="alertdialog" {...focusProps}>
+        <DrawerHeader className="text-left group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
           <DrawerTitle className="text-lg">{title}</DrawerTitle>
           <DrawerDescription className="text-base">{description}</DrawerDescription>
         </DrawerHeader>

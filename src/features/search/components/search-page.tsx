@@ -323,8 +323,6 @@ export function SearchPage() {
           error={inputError}
           placeholder={`e.g. ${placeholder}`}
         />
-        {/* Below sm the plan badge sits in the top bar directly above, so the quota isn't repeated here. */}
-        <SearchQuota className="mt-2.5 justify-end px-1 max-sm:hidden" />
         {chips && <div className="mt-3">{chips}</div>}
       </div>
       <div className="mt-2">{body}</div>

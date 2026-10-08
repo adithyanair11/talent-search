@@ -215,6 +215,7 @@ function YearsEditor({ filters, onEdit }: { filters: Filters; onEdit: Edit }) {
         min={0}
         max={MAX_YEARS}
         placeholder="Any"
+        autoFocus={isMin}
         value={value}
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? errorId : undefined}

@@ -19,24 +19,22 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useIsDesktop } from "@/hooks/use-media-query"
+import { useRestoreFocus } from "@/hooks/use-restore-focus"
 
 const COPY = {
   quota: {
     title: "You've used your free search",
     description:
-      "The free plan includes one search per company. Results you already have, shortlists and saved searches stay available.",
+      "The free plan includes one search per company. Editing filters or re-running a saved search counts as a new search. Your results, shortlists and saved searches stay available.",
   },
   manual: {
     title: "Upgrade to Pro",
-    description: "The free plan includes one search per company. Pro removes the limit.",
+    description:
+      "The free plan includes one search per company. Editing filters or re-running a saved search counts as a new search.",
   },
 } as const
 
-const BENEFITS = [
-  "Unlimited searches and re-runs",
-  "Edit filters and search again",
-  "Re-run saved searches any time",
-]
+const BENEFITS = ["Unlimited searches", "Edit filters and re-run saved searches as often as you like"]
 
 /**
  * Explains the free limit (opened on a 402 or from PlanBadge). There is no checkout in this app:
@@ -56,6 +54,9 @@ export function UpgradeDialog({
 }) {
   const isDesktop = useIsDesktop()
   const copy = COPY[reason]
+
+  // Opened from a store (a 402, the plan badge), not a trigger: return focus to whatever opened it.
+  const focusProps = useRestoreFocus()
 
   const mark = (
     <span
@@ -79,8 +80,8 @@ export function UpgradeDialog({
   )
   const note = (
     <p className="text-sm text-pretty text-muted-foreground">
-      Pro means your company has an active Stripe subscription. There&apos;s no checkout in this demo: your plan
-      switches to Pro here automatically once Stripe confirms the subscription to our billing webhook.
+      There&apos;s no checkout in this demo. Your plan switches to Pro on its own once Stripe tells our billing
+      webhook that your company&apos;s subscription is active.
     </p>
   )
   const close = (
@@ -92,7 +93,7 @@ export function UpgradeDialog({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="gap-5 sm:max-w-md">
+        <DialogContent className="gap-5 sm:max-w-md" {...focusProps}>
           <DialogHeader>
             {mark}
             <DialogTitle className="text-xl font-semibold">{copy.title}</DialogTitle>
@@ -111,8 +112,8 @@ export function UpgradeDialog({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader className="text-left">
+      <DrawerContent {...focusProps}>
+        <DrawerHeader className="text-left group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
           {mark}
           <DrawerTitle className="text-xl font-semibold">{copy.title}</DrawerTitle>
           <DrawerDescription className="text-base">{copy.description}</DrawerDescription>

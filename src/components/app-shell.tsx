@@ -1,6 +1,9 @@
 import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils"
 
+/** The `<main>` landmark: the skip link's target, and where focus goes when a dialog's opener is gone. */
+export const MAIN_ID = "main"
+
 /**
  * Page frame. ≥ 768px: slim 240px sidebar + content. < 768px: sticky top bar + content + fixed
  * bottom tab bar. Pure layout — pass navigation in as slots so it stays route-agnostic.
@@ -22,6 +25,13 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-dvh w-full flex-1">
+      {/* First stop for keyboard users: skips the sidebar (or the mobile top bar). */}
+      <a
+        href={`#${MAIN_ID}`}
+        className="sr-only z-50 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Skip to content
+      </a>
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-sidebar-border bg-surface/60 text-sidebar-foreground md:flex">
         {sidebar}
       </aside>
@@ -30,7 +40,11 @@ export function AppShell({
           {topBarStart ?? <Brand />}
           {topBarEnd}
         </header>
-        <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+        <main
+          id={MAIN_ID}
+          tabIndex={-1}
+          className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] outline-none md:pb-0"
+        >{children}</main>
         <nav
           aria-label="Primary"
           className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"

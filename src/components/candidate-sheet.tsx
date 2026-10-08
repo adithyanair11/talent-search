@@ -56,6 +56,22 @@ type CandidateSheetProps = {
 }
 
 /**
+ * The sheet opens from the URL, so there is no trigger for focus to return to. On close, focus goes back to the
+ * open candidate's card or row (when it is still on screen) so keyboard users keep their place in the list.
+ */
+function returnFocusToCard(candidateId: string | undefined) {
+  return (e: Event) => {
+    if (!candidateId) return
+    const target = document.querySelector<HTMLElement>(
+      `[data-candidate-id="${CSS.escape(candidateId)}"] [data-row-open]`,
+    )
+    if (!target) return
+    e.preventDefault()
+    target.focus({ preventScroll: true })
+  }
+}
+
+/**
  * Candidate detail: right side sheet ≥ 768px, full-height bottom drawer below. Heavy and opened on demand —
  * import it with `next/dynamic` from feature code.
  */
@@ -80,6 +96,7 @@ export function CandidateSheet(props: CandidateSheetProps) {
           side="right"
           showCloseButton={false}
           onOpenAutoFocus={focusContainer}
+          onCloseAutoFocus={returnFocusToCard(candidate?.id)}
           onInteractOutside={keepOpenForToasts}
           className="w-full gap-0 overflow-hidden bg-card p-0 outline-none sm:max-w-[480px] md:inset-y-2 md:right-2 md:h-auto md:rounded-2xl md:border md:border-border"
         >
@@ -105,6 +122,7 @@ export function CandidateSheet(props: CandidateSheetProps) {
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
         onOpenAutoFocus={focusContainer}
+        onCloseAutoFocus={returnFocusToCard(candidate?.id)}
         onInteractOutside={keepOpenForToasts}
         className={cn(
           "outline-none pt-[env(safe-area-inset-top)]",
@@ -260,8 +278,13 @@ export function CandidateProfile({
     <div className="divide-y divide-border">
       <header className="bg-gradient-to-b from-surface to-transparent px-5 pt-6 pb-6 sm:px-6">
         <CandidateAvatar src={c.avatar_url} name={c.full_name} size="lg" priority />
-        <h2 className="mt-4 text-2xl font-semibold text-balance">{c.full_name}</h2>
-        <p className="mt-1 text-base text-pretty text-muted-foreground">{c.headline}</p>
+        {/* The dialog's (visually hidden) title and description already name the person and headline. */}
+        <p aria-hidden className="mt-4 text-2xl font-semibold text-balance">
+          {c.full_name}
+        </p>
+        <p aria-hidden className="mt-1 text-base text-pretty text-muted-foreground">
+          {c.headline}
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <CompanyLogo src={c.current_company_logo_url} company={c.current_company} size="xs" />

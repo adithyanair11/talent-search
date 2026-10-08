@@ -1,10 +1,11 @@
 "use client"
 
-import { HistoryIcon } from "lucide-react"
+import { StarIcon } from "lucide-react"
 import Link from "next/link"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { Button } from "@/components/ui/button"
+import { usePlan } from "@/features/plan/hooks"
 import { useDeleteSavedBrief, useRunSavedSearch, useSavedBriefs } from "../hooks"
 import { SavedBriefRow, SavedBriefRowSkeleton } from "./saved-brief-row"
 
@@ -16,6 +17,7 @@ export function SavedSearchesPage() {
   const saved = useSavedBriefs()
   const remove = useDeleteSavedBrief()
   const { run, pendingId } = useRunSavedSearch()
+  const plan = usePlan()
 
   let body: React.ReactNode
   if (saved.isPending) {
@@ -41,7 +43,7 @@ export function SavedSearchesPage() {
     body = (
       <div className={STATE_CARD}>
         <EmptyState
-          icon={HistoryIcon}
+          icon={StarIcon}
           title="No saved searches yet"
           description="After a search, press Save search above the results. We keep the brief and your edited filters so anyone at your company can re-run it for fresh results."
           action={
@@ -74,7 +76,8 @@ export function SavedSearchesPage() {
       <div className="mb-6 space-y-1 md:mb-8">
         <h1 className="text-2xl font-semibold">Saved searches</h1>
         <p className="text-sm text-pretty text-muted-foreground">
-          Running one starts a fresh search with the same brief and filters, so it counts as a search on the free plan.
+          Running one starts a fresh search with the same brief and filters
+          {plan.data?.plan === "free" ? ", so it counts as a search on the free plan." : "."}
         </p>
       </div>
       {body}

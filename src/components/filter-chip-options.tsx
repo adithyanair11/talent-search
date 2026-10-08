@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { CheckboxIndicator } from "@/components/checkbox-indicator"
 import {
   Command,
@@ -31,8 +32,27 @@ export function FilterChipOptions({
   placeholder?: string
   emptyText?: string
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const first = selected[0]
+  const firstText = first === undefined ? undefined : formatOption ? formatOption(first) : first
+
+  // The editor mounts after its popover opened (it is lazy-loaded), so the popover's own auto-focus has already
+  // landed on its frame. Move focus into the list so arrow keys, Enter and typing work straight away. On touch
+  // screens the filter input isn't focused: that would open the on-screen keyboard over the list.
+  useEffect(() => {
+    const root = ref.current
+    if (!root || root.contains(document.activeElement)) return
+    const input = window.matchMedia("(pointer: fine)").matches ? root.querySelector<HTMLElement>("[cmdk-input]") : null
+    ;(input ?? root).focus()
+  }, [])
+
   return (
-    <Command className="-m-1 w-auto bg-transparent">
+    <Command
+      ref={ref}
+      tabIndex={-1}
+      defaultValue={firstText}
+      className="-m-1 w-auto bg-transparent outline-none"
+    >
       {options.length > 8 && <CommandInput placeholder={placeholder} />}
       <CommandList className="max-h-64">
         <CommandEmpty>{emptyText}</CommandEmpty>

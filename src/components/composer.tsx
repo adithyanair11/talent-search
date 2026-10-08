@@ -219,7 +219,8 @@ export function Composer({
         </p>
       )}
 
-      {meta && <div className={cn("mt-2.5 flex min-h-5 w-full items-center", hero ? "justify-center" : "justify-end px-1")}>{meta}</div>}
+      {/* empty:hidden — a meta component can render nothing (e.g. no quota on Pro) and must not leave a gap. */}
+      {meta && <div className={cn("mt-2.5 flex min-h-5 w-full items-center empty:hidden", hero ? "justify-center" : "justify-end px-1")}>{meta}</div>}
 
       {hero && suggestions && suggestions.length > 0 && (
         <ul aria-label="Example briefs" className="mt-6 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center">
