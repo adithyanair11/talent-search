@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useSignOut } from "@/features/auth/hooks"
+import { preloadAuthClient, useSignOut } from "@/features/auth/hooks"
 import { cn } from "@/lib/utils"
 
 /** Company mark. Companies have no logo in the data, so it's a neutral monogram tile. */
@@ -54,7 +54,14 @@ export function AccountMenu({ companyName, email }: { companyName: string; email
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        // Sign out is in this menu: warm the lazily loaded auth client as it opens.
+        if (next) preloadAuthClient()
+        setOpen(next)
+      }}
+    >
       <DropdownMenuTrigger
         className={cn(
           "-ml-1 flex h-11 min-w-0 items-center gap-2 rounded-md px-1 text-left outline-none transition-colors md:h-9 md:w-full md:px-2",

@@ -21,9 +21,10 @@ import {
   SKILLS,
   STATES,
 } from '@/lib/vocabulary'
+import { BRIEF_MAX_LENGTH, CONSTRAINT_KEYS, MAX_YEARS, SCOPES } from '@/lib/limits'
 
-export const BRIEF_MAX_LENGTH = 500
-export const MAX_YEARS = 50
+export { BRIEF_MAX_LENGTH, CONSTRAINT_KEYS, formatCorrection, MAX_YEARS, SCOPES } from '@/lib/limits'
+
 const MAX_LIST = 20
 const MAX_UNSUPPORTED = 10
 const MAX_NOTE = 200
@@ -41,8 +42,6 @@ function text(min: number, max: number) {
 }
 
 export const briefSchema = text(1, BRIEF_MAX_LENGTH)
-
-export const SCOPES = ['any', 'current'] as const
 
 /** A non-empty list without duplicates. */
 function list<T extends z.ZodType<string>>(item: T) {
@@ -97,27 +96,6 @@ export const filtersSchema = z
 
 export type Filters = z.infer<typeof filtersSchema>
 export type Correction = NonNullable<Filters['corrections']>[number]
-
-/** Chip text for a corrected typo: "Android (corrected from Andriod)". */
-export function formatCorrection(c: Correction): string {
-  return `${c.to} (corrected from ${c.from})`
-}
-
-/** Filter keys that constrain who matches (everything except the explanatory fields). */
-export const CONSTRAINT_KEYS = [
-  'roles',
-  'seniority',
-  'years_experience',
-  'locations',
-  'open_to_work',
-  'skills_all',
-  'skills_any',
-  'companies',
-  'company_type',
-  'degrees',
-  'schools',
-  'fields_of_study',
-] as const satisfies readonly (keyof Filters)[]
 
 /**
  * "Never return everyone": a search runs only when at least one supported constraint exists and no

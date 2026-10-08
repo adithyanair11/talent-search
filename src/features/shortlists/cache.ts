@@ -2,7 +2,8 @@
  * Pure updaters for the shortlist query cache, applied optimistically before the server confirms
  * (and rolled back from a snapshot if it doesn't).
  */
-import { SHORTLIST_AVATARS, type ShortlistDetail, type ShortlistSummary } from "@/lib/schemas/shortlists"
+import { SHORTLIST_AVATARS } from "@/lib/limits"
+import type { ShortlistDetail, ShortlistSummary } from "@/lib/schemas/shortlists"
 
 export type MemberRef = { id: string; avatar_url: string | null }
 

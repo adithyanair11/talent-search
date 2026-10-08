@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "../demo-accounts"
 import { safeNextPath } from "../safe-next"
-import { type SignInError, useSignIn } from "../hooks"
+import { preloadAuthClient, type SignInError, useSignIn } from "../hooks"
 
 const MESSAGES: Record<SignInError, string> = {
   invalid_credentials: "That email and password don't match a recruiter account.",
@@ -35,6 +35,8 @@ export function LoginForm() {
   // same instance again on sign-out. Effects are cleaned up when it is hidden, so wipe the finished sign-in there;
   // otherwise the form comes back stuck on "Signing in…" with the previous password filled in.
   const { reset } = signIn
+  // Signing in is the only thing to do here: fetch the (lazily loaded) auth client while the recruiter types.
+  useEffect(preloadAuthClient, [])
   useEffect(
     () => () => {
       reset()

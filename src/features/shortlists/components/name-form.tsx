@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { SHORTLIST_NAME_MAX, shortlistNameSchema } from "@/lib/schemas/shortlists"
+import { checkShortlistName, SHORTLIST_NAME_MAX } from "@/lib/limits"
 import { cn } from "@/lib/utils"
 import { nameTaken } from "../cache"
 import { useShortlists } from "../hooks"
@@ -44,16 +44,16 @@ export function NameForm({
 
   const save = async () => {
     if (pending || cancelled.current) return
-    const parsed = shortlistNameSchema.safeParse(name)
-    if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Check the name.")
+    const checked = checkShortlistName(name)
+    if ("error" in checked) return setError(checked.error)
     // Renaming to the same name is a no-op, not an error.
-    if (exceptId && parsed.data === initialName.trim()) return onCancel()
-    if (nameTaken(lists.data ?? [], parsed.data, exceptId)) {
-      return setError(`You already have a list called “${parsed.data}”. Pick another name.`)
+    if (exceptId && checked.name === initialName.trim()) return onCancel()
+    if (nameTaken(lists.data ?? [], checked.name, exceptId)) {
+      return setError(`You already have a list called “${checked.name}”. Pick another name.`)
     }
     setPending(true)
     try {
-      await onSubmit(parsed.data)
+      await onSubmit(checked.name)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save the name. Try again.")
       setPending(false)

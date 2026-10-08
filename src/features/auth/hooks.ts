@@ -2,7 +2,13 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
-import { getSupabaseBrowser } from "./supabase-browser"
+
+/**
+ * supabase-js (~220 KB: auth, realtime, storage, postgrest) is only needed at the moment someone signs in or out,
+ * so it is loaded on demand instead of shipping with every page. `preloadAuthClient` warms it off the critical path.
+ */
+const loadSupabase = () => import("./supabase-browser").then((m) => m.getSupabaseBrowser())
+export const preloadAuthClient = () => void loadSupabase().catch(() => undefined)
 
 export type SignInError = "invalid_credentials" | "network" | "unknown"
 
@@ -13,7 +19,7 @@ export function useSignIn() {
     mutationFn: async ({ email, password }) => {
       let result
       try {
-        result = await getSupabaseBrowser().auth.signInWithPassword({ email, password })
+        result = await (await loadSupabase()).auth.signInWithPassword({ email, password })
       } catch {
         throw "network" satisfies SignInError
       }
@@ -34,7 +40,7 @@ export function useSignOut() {
   const router = useRouter()
   return useMutation({
     mutationFn: async () => {
-      const { error } = await getSupabaseBrowser().auth.signOut({ scope: "local" })
+      const { error } = await (await loadSupabase()).auth.signOut({ scope: "local" })
       if (error) throw error
     },
     onSuccess: () => {

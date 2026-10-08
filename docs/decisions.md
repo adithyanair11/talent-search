@@ -626,3 +626,90 @@ expected sets don't depend on the code under test.
   used from the plan (that is the API contract); offline and anything else get their own sentence.
 - **The login page shows a still product glimpse from `lg` up** (`LoginPreview`): no names, avatars or numbers
   that look like real data beyond one example count, and no animation, so it can't be mistaken for live results.
+
+## Performance pass (bundles, renders, images, database)
+
+Measured before and after with `next build` (production, Turbopack). Next 16 no longer prints per-route sizes,
+so the numbers below are first-load JS summed from `.next/diagnostics/route-bundle-stats.json` (gzipped with
+zlib), with `next analyze` used to attribute bytes to packages.
+
+| Route | Before (gz) | After (gz) | Change |
+|---|---|---|---|
+| `/search` | 364 KB | 260 KB | −29% |
+| `/shortlists/[id]` | 349 KB | 254 KB | −27% |
+| `/shortlists` | 323 KB | 228 KB | −29% |
+| `/saved` | 318 KB | 220 KB | −31% |
+| `/` | 283 KB | 217 KB | −23% |
+| `/login` | 254 KB | 188 KB | −26% |
+
+- **supabase-js loads on demand (~220 KB raw on every page before).** The browser only uses Supabase to sign in
+  and out; the session lives in cookies and every data call goes through our API. `features/auth/hooks.ts` now
+  `import()`s the client inside the mutation. `/login` warms it on mount and the account menu warms it when it
+  opens, so neither action waits for the download.
+- **zod left the client bundle (~100 KB raw).** It came in through a few runtime values (`MAX_YEARS`,
+  `CONSTRAINT_KEYS`, `formatCorrection`, `SHORTLIST_AVATARS`, `searchIdSchema`, `shortlistNameSchema`) imported
+  from the zod schema modules. Those values now live in `src/lib/limits.ts` (no zod), the schemas re-export or
+  build on them so client and server can't drift, and `limits.test.ts` checks that `isUuid` and
+  `checkShortlistName` give the same answers as `z.uuid()` and `shortlistNameSchema`. Client code may still
+  `import type` from `lib/schemas`, because type imports disappear at build time.
+- **Chip editors are a `next/dynamic` chunk** (`features/search/components/filter-editor.tsx` plus
+  `components/filter-chip-options.tsx`). They carry cmdk and the vocabulary lists, which nobody needs until a chip
+  is opened. `SearchFilters` preloads the chunk once chips are on screen, so in practice the popover never
+  shows its skeleton.
+- **What was already lazy and stayed that way:** CandidateSheet, UpgradeDialog, ConfirmDialog and the shortlist
+  popover/drawer content. Route pages (`/shortlists`, `/shortlists/[id]`) are already split per route by the
+  App Router. Wrapping a whole page in `next/dynamic` would only add a second round trip before anything paints.
+- **No server code or bulk data in client chunks.** Scanned every `.next/static/chunks/*.js` for env var names,
+  `service_role`, `api.openai.com`, `createHmac`/`timingSafeEqual`, `run_search` and candidate ids. The only hit
+  is `/dev/design`'s four fixture records, which are copied from the data on purpose (see "Redesign").
+  `server-only` would fail the build if a server module were ever imported from a client file.
+- **Render audit (by reading the code).** `CandidateCard`/`CandidateRow` were already memoised with stable
+  callbacks: `usePersonParam`, `usePrefetchPerson`, `renderShortlistMenu` at module level, `renderRemove` in
+  `useCallback`, and `shortlisted` passed as a boolean. `FilterChip` was memoised but received inline closures
+  and a fresh `editor` element on every render, so the memo never held. Each chip is now a memoised
+  `UnderstoodChip`/`UnsupportedChip` that uses `useCallback` for its handlers, `useMemo` for its editor element
+  and a per-chip zustand selector (`s.openChip === chip.key`), and `chipsFor(filters)` is memoised. Opening one
+  editor re-renders only the chip that opened and the one that closed. Other zustand reads were already single-
+  field selectors. React Query keys are tuples from key factories (`searchKeys.pages(id)`,
+  `personKeys.detail(id)`). No React context besides the providers' (theme, query client, tooltip).
+- **Prefetching was already in place:** the next results page is fetched when the virtualised list is 8 rows from
+  the end, and candidate profiles plus the sheet chunk are prefetched on row hover/focus and for the sheet's
+  neighbours.
+- **Images:** every avatar and logo is `next/image` with explicit `width`/`height` and `sizes`. Next 16
+  deprecates `priority`, so the first two avatars of a list (and the open sheet's) use `loading="eager"` +
+  `fetchPriority="high"`, and the rest stay lazy. The placeholder is a colour: the muted avatar circle and the
+  white logo tile. Blur placeholders would need `blurDataURL`. The sources are remote SVGs, which next/image
+  serves as-is (it doesn't rasterise SVG), so there is no blur data to generate without fetching each image at
+  build time.
+- **Fonts** were already `next/font/google` (self-hosted at build time, `display: swap`). There are no CSS
+  `@import`s of web fonts.
+
+### Database: EXPLAIN ANALYZE, no new indexes
+
+`run_search` is plpgsql, so a plain `EXPLAIN` of the call shows nothing. The plans come from `auto_explain`
+(`log_nested_statements`, `log_analyze`, `log_level=notice`), run as `supabase_admin` inside a rolled-back
+transaction. The 30 eval briefs (`data/queries.json` + `scripts/eval-extra.json`) went through the real extractor
+and normalizer, then each called `run_search` as the globex recruiter and read a page with `search_page`.
+
+- **Matching never seq-scans `candidates` for any eval brief.** Every match is a BitmapAnd/BitmapOr over the
+  btree indexes (role, seniority, city/state keys, open_to_work, company type) and the GIN array indexes (skills,
+  degrees, schools, companies). The match+rank statement takes 0.1–3.3 ms.
+- **The only seq scans are where an index wouldn't help.** `companies` (2 rows, the quota row lock) and
+  `searches` on a fresh database (Postgres switches to `searches_pkey` as the table grows). Very broad filters
+  (`open_to_work: true` = 30% of rows) also seq-scan `candidates`, which is the right plan at that selectivity:
+  about 9 ms including ranking 1,510 rows.
+- **The "never return everyone" guard** (`count(*) from candidates`) is an index-only scan, 0.3 ms.
+- **`search_page` cost doesn't depend on page depth:** it slices the stored id array, then does 20 primary-key
+  lookups, under 0.5 ms at page 70.
+- So no migration. The database accounts for single-digit milliseconds of a search that the LLM call dominates.
+
+### Bench (`API_BASE_URL=… npm run bench` against `next start`)
+
+```
+PASS  new search   n= 10  p50  1340 ms  p95  1671 ms  (target p95 < 3000 ms)
+PASS  cached brief n= 10  p50    15 ms  p95    19 ms  (target p95 < 3000 ms)
+PASS  paging       n=200  p50     8 ms  p95     9 ms  (target p95 < 300 ms)
+```
+
+Paging was measured over a 1,510-result snapshot (76 pages). This pass didn't change the server, so these are
+the same numbers before and after. The eval is unchanged too (macro P/R/F1 1.000).

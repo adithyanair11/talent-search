@@ -17,8 +17,9 @@ import { SearchQuota } from "@/features/plan/components/search-quota"
 import { useUpgradeStore } from "@/features/plan/store"
 import { SaveSearchButton } from "@/features/saved-briefs/components/save-search-button"
 import { ApiError } from "@/lib/api-client"
-import { formatCorrection, type Filters } from "@/lib/schemas/filters"
-import { type SearchRequest, searchIdSchema } from "@/lib/schemas/search"
+import { formatCorrection, isUuid } from "@/lib/limits"
+import type { Filters } from "@/lib/schemas/filters"
+import type { SearchRequest } from "@/lib/schemas/search"
 import { type Chip, type ConstraintKey, matchedSkillsOf, withFilter } from "../filter-model"
 import { useRunSearch, useSearchPages } from "../hooks"
 import { useSearchUiStore } from "../store"
@@ -53,7 +54,7 @@ export function SearchPage() {
   const router = useRouter()
   const pathname = usePathname()
   const raw = useSearchParams().get("s")
-  const searchId = raw !== null && searchIdSchema.safeParse(raw).success ? raw : null
+  const searchId = raw !== null && isUuid(raw) ? raw : null
   const badId = raw !== null && searchId === null
 
   const pagesQuery = useSearchPages(searchId)

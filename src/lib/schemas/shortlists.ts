@@ -1,17 +1,17 @@
 /** Contracts for `/api/shortlists/*` (CLAUDE.md). */
 import { z } from 'zod'
 
+import { SHORTLIST_NAME_MAX, SHORTLIST_NAME_MESSAGES } from '@/lib/limits'
+
 import type { SearchResult } from './search'
 
-export const SHORTLIST_NAME_MAX = 60
-/** How many member avatars a list summary carries (the card shows a stack of them). */
-export const SHORTLIST_AVATARS = 4
+export { SHORTLIST_AVATARS, SHORTLIST_NAME_MAX } from '@/lib/limits'
 
 export const shortlistNameSchema = z
   .string()
   .trim()
-  .min(1, 'Give the list a name.')
-  .max(SHORTLIST_NAME_MAX, `Keep the name to ${SHORTLIST_NAME_MAX} characters or fewer.`)
+  .min(1, SHORTLIST_NAME_MESSAGES.empty)
+  .max(SHORTLIST_NAME_MAX, SHORTLIST_NAME_MESSAGES.tooLong)
 
 /** Body of `POST /api/shortlists` and `PATCH /api/shortlists/{id}`. */
 export const shortlistBodySchema = z.object({ name: shortlistNameSchema }).strict()

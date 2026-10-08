@@ -3,9 +3,10 @@
 import { ArrowUpIcon, Loader2Icon, type LucideIcon, SparklesIcon } from "lucide-react"
 import { useEffect, useId, useLayoutEffect, useRef } from "react"
 import { Kbd } from "@/components/kbd"
+import { BRIEF_MAX_LENGTH } from "@/lib/limits"
 import { cn } from "@/lib/utils"
 
-export const BRIEF_MAX_LENGTH = 500
+export { BRIEF_MAX_LENGTH }
 
 export type ComposerSuggestion = { label: string; icon?: LucideIcon }
 

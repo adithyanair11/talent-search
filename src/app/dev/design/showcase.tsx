@@ -46,9 +46,9 @@ import {
   AddFilterChip,
   FilterChip,
   FilterChipList,
-  FilterChipOptions,
   FilterChipsSkeleton,
 } from "@/components/filter-chip"
+import { FilterChipOptions } from "@/components/filter-chip-options"
 import { Kbd } from "@/components/kbd"
 import { type Plan, PlanBadge } from "@/components/plan-badge"
 import { Tag } from "@/components/tag"

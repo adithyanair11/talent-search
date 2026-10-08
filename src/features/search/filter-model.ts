@@ -3,7 +3,8 @@
  * Every editable value comes from the real data vocabulary (src/lib/vocabulary.ts), so an edited filter
  * set always passes `filtersSchema` on the server.
  */
-import { CONSTRAINT_KEYS, MAX_YEARS, type Filters } from "@/lib/schemas/filters"
+import { CONSTRAINT_KEYS, MAX_YEARS } from "@/lib/limits"
+import type { Filters } from "@/lib/schemas/filters"
 
 export type ConstraintKey = (typeof CONSTRAINT_KEYS)[number]
 
