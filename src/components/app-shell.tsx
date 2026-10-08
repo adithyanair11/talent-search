@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils"
  */
 export function AppShell({
   sidebar,
+  topBarStart,
   topBarEnd,
   tabBar,
   children,
 }: {
   sidebar: React.ReactNode
+  /** Left side of the mobile top bar (e.g. the company / account menu). Defaults to the brand. */
+  topBarStart?: React.ReactNode
   /** Right side of the mobile top bar (e.g. PlanBadge). */
   topBarEnd?: React.ReactNode
   tabBar: React.ReactNode
@@ -24,7 +27,7 @@ export function AppShell({
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md md:hidden">
-          <Brand />
+          {topBarStart ?? <Brand />}
           {topBarEnd}
         </header>
         <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>

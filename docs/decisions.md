@@ -99,3 +99,38 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
 - **Sheet vs Drawer is chosen with `useSyncExternalStore(matchMedia)`.** It returns `false` on the server. That
   is safe because the sheet only opens after user interaction. Persistent layout (sidebar vs tab bar) uses CSS
   breakpoints, so the first paint is right.
+
+## Auth & app shell
+
+- **One auth entry point for API routes: `getRequestContext(req)`.** If an `Authorization` header is present it
+  must be `Bearer <jwt>` (a malformed header is a 401, never a silent fall-back to cookies); otherwise the
+  `@supabase/ssr` cookie session is used. The JWT is verified with `auth.getClaims()` (signature + expiry), and
+  the company is read through the caller's own RLS client (`companies` only returns their row). A valid user with
+  no recruiter row gets 401, the same as no session. `getClaims` *throws* on undecodable tokens, so it is wrapped.
+- **Route handlers export neither `runtime` nor `dynamic`.** With `cacheComponents`, Next 16 rejects both segment
+  configs ("not compatible with `nextConfig.cacheComponents`"). Reading the request already makes a handler dynamic,
+  and Node is the default runtime.
+- **Server Components read the session after `await connection()`.** `getClaims` checks expiry against the clock,
+  and Next flags `Date.now()` during prerendering. The session read lives in `<Account>` behind `<Suspense>`, so the
+  rest of the frame streams immediately. It is wrapped in `React.cache` because the account menu renders twice
+  (sidebar + mobile top bar).
+- **`proxy.ts` refreshes the session on pages and `/api/*`, redirects only pages.** Signed-out page requests go
+  to `/login?next=…` (`next` must be a same-origin path, checked on the client to block open redirects). API
+  routes answer 401 JSON themselves. Bearer API calls skip the cookie work. `/api/billing/events` is excluded by
+  the matcher. A signed-in visit to `/login` is *not* bounced back to the app: a session without a recruiter row is
+  sent to `/login`, and bouncing it would loop. `/dev/design` stays public (static fixtures only).
+- **Sign-in/out run in the browser with the Supabase browser client** (it writes the auth cookies). Sign-out uses
+  `scope: "local"` (this browser only) and clears the React Query cache, so nothing from one company is shown to
+  the next recruiter on the same tab. The 401 handler in the QueryClient sends an expired session to `/login`.
+- **Demo credentials are shown on the login page.** No sign-up or reset is in scope, so graders need a way in. The
+  accounts and password are the ones `scripts/seed.ts` creates for the local stack only. They grant nothing beyond
+  the local demo.
+- **Company identity is a monogram tile.** Companies have no logo in the data. The company name + menu (email, Sign
+  out) sits in the sidebar header on desktop and the top bar on mobile, per the design system's AppShell.
+- **`GET /api/plan` reads `companies.searches_used` and the company's `active`/`trialing` subscriptions with the
+  caller's RLS client.** `private.company_is_paid()` isn't reachable over PostgREST (the `private` schema isn't
+  exposed); recruiters can SELECT their own subscriptions, so the same rule is applied in `src/lib/plan.ts`
+  (`FREE_SEARCH_LIMIT = 1`, `PAID_STATUSES`). `run_search` must use the same limit when it lands.
+- **Vitest aliases `server-only` to its no-op build and loads `.env.local` via `scripts/lib/env.ts`.** Route
+  handlers are tested by calling `GET(new Request(...))` against local Supabase with the seeded recruiters; the suite
+  skips itself when Supabase isn't running.
