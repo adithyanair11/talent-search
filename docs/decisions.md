@@ -9,8 +9,9 @@ Non-obvious choices, newest last. Feeds the README.
 - **`supabase/config.toml` `project_id = "talent-search"` set explicitly.** `supabase init` derives it from the
   folder name, which produced `talent-search_` here (the checkout folder ends with a space). An explicit id keeps
   Docker container/volume names stable regardless of where the repo is cloned.
-- **Auth:** email/password only; `enable_signup = false` (global and email) since sign-up is out of scope;
-  recruiters are created by `scripts/seed.ts` via the admin API. Email confirmations off. `site_url` is
+- **Auth:** email/password only; `[auth] enable_signup = false` since sign-up is out of scope; recruiters are
+  created by `scripts/seed.ts` via the admin API. `[auth.email] enable_signup` must stay `true`: the CLI maps it
+  to the whole email provider, and `false` made every password login fail with "Email logins are disabled". Email confirmations off. `site_url` is
   `http://localhost:3000`.
 - **Env:** `scripts/setup-env.ts` regenerates `.env.local` from `npx supabase status -o env` on every setup
   (`API_URL`, `PUBLISHABLE_KEY`, `SECRET_KEY`, with fallbacks to the legacy `ANON_KEY` / `SERVICE_ROLE_KEY`).
@@ -27,7 +28,7 @@ Non-obvious choices, newest last. Feeds the README.
   `https://rotto.com/rotto/...`, so only that host + path prefix is allowed.
 - **npm 11 `allowScripts`:** install scripts are approved per package (`esbuild`, `unrs-resolver`) in
   `package.json`; the Supabase CLI package needs none.
-- **Unimplemented scripts** (`eval`, `replay:stripe`, `probe:security`, `test:quota`, `bench`, `seed`) are stubs
+- **Unimplemented scripts** (`eval`, `replay:stripe`, `test:quota`, `bench`) are stubs
   that exit 0 so `make setup` and the npm scripts work before each feature lands.
 
 ## Search semantics (from data analysis)
@@ -41,3 +42,41 @@ Full evidence in `docs/data-notes.md` §3 — each rule reproduces the sample `e
 - **"Enterprise sales experience" is the skill `Enterprise Sales`**, not `company_type = enterprise` (P 0.71, R 0.68).
 - **A place name is a city**; only an explicit state name/code filters by state ("San Francisco" ≠ CA).
 - **A material requirement the data can't express (e.g. spoken languages) yields 0 results** with an `unsupported` note.
+
+## Schema & tenancy
+
+- **Candidates are one row each: scalar columns plus `experiences` / `education` as ordered jsonb arrays, with
+  stored generated search columns** (`skills_key`, `city_key`, `state_key`, `title_key`, `companies_key`,
+  `company_types`, `current_company_type`, `degrees`, `schools_key`, `fields_key`) and a GIN or btree index on each.
+  Every search predicate in data-notes §3 is then a row-level check on one table: no joins, no duplicate rows, no
+  `EXISTS` subqueries, and generated columns can never drift from the source. Child tables would add joins for
+  5,000 rows and nothing the search needs. The detail endpoint returns the jsonb as-is.
+- **Search keys are lower-cased (state upper-cased)**, so normalized filter values match case-insensitively with
+  plain `=` / `@>` / `&&`. The helpers that build them (`private.jsonb_texts`, `private.lower_texts`) are
+  `immutable`, as generated columns require.
+- **No trigram indexes.** The data is a closed vocabulary (data-notes §2) and search matches normalized exact
+  values; fuzzy text matching would only add false positives ("React" ~ "React Native").
+- **Candidate id is the dataset's text id (`cand_0629`), and `searches.result_ids` is `text[]`.** The grader and
+  `data/queries.json` compare these exact ids, so the API returns them with no mapping layer.
+- **Writes are limited by column-level grants as well as RLS.** Recruiters may insert/update only `name`
+  (shortlists), `shortlist_id, person_id` (shortlist_people) and `brief, filters` (saved_briefs). `company_id`
+  comes from the `private.current_company_id()` default, is checked in `WITH CHECK`, and a `BEFORE UPDATE`
+  trigger rejects any change to it. That gives three independent layers.
+- **`shortlist_people.company_id` must equal its shortlist's company**, enforced by a composite FK
+  `(shortlist_id, company_id) → shortlists(id, company_id)`. FK checks bypass RLS, so adding a person to another
+  company's list fails on the FK even though the caller can't see that list.
+- **`FORCE ROW LEVEL SECURITY` only on the recruiter-writable tables** (shortlists, shortlist_people,
+  saved_briefs). Server-written tables are changed only by `security definer` functions or the service role;
+  both run as BYPASSRLS roles locally (`postgres`, `service_role`), so `FORCE` would add nothing there.
+- **Recruiters can read their own company's `searches` and `subscriptions`** (needed for paging and plan display)
+  but cannot write them. `stripe_events` has RLS on and no policy, so it is invisible to every API role.
+- **`private.company_is_paid(company)` returns true only for the caller's own company or the service role.**
+  Any other company reads as unpaid, so it can't be used to learn another tenant's plan.
+- **Scripts that import `src/server/*` run with `tsx --conditions=react-server`** (`npm run seed`,
+  `npm run probe:security`). `server-only` throws outside the react-server condition, and the condition lets
+  scripts reuse `src/server/supabase-admin.ts`, the single place the secret key is read. Scripts load
+  `.env.local` with `process.loadEnvFile`, which never overrides real environment variables.
+- **`scripts/probe-security.ts` uses the admin client only to create and remove fixtures** (globex rows in
+  searches, subscriptions and stripe_events, which no recruiter can write). Every attack runs with the acme
+  recruiter's token or with no token. API cases are skipped until the routes exist (a non-JSON 404 means the
+  route isn't implemented yet).

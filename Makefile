@@ -8,7 +8,7 @@ SUPABASE := npx supabase
 setup: check-prereqs install supabase-up
 	$(SUPABASE) db reset
 	npx tsx scripts/setup-env.ts
-	npx tsx scripts/seed.ts
+	npm run seed
 	@printf '\n✔ Setup complete. Run "make dev" and open http://localhost:3000\n'
 
 dev: check-prereqs supabase-up
@@ -21,7 +21,7 @@ stop:
 # Wipe the local database back to migrations + seed, then re-seed recruiters and candidates.
 reset: check-prereqs supabase-up
 	$(SUPABASE) db reset
-	npx tsx scripts/seed.ts
+	npm run seed
 
 test:
 	npm test

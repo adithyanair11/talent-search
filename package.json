@@ -14,9 +14,10 @@
     "test": "vitest run",
     "eval": "tsx scripts/eval-search.ts",
     "replay:stripe": "tsx scripts/replay-stripe.ts",
-    "probe:security": "tsx scripts/probe-security.ts",
+    "probe:security": "tsx --conditions=react-server scripts/probe-security.ts",
     "test:quota": "tsx scripts/test-quota.ts",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "seed": "tsx --conditions=react-server scripts/seed.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
