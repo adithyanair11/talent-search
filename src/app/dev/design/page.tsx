@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { notFound } from "next/navigation"
 import { Suspense } from "react"
 import { DesignShowcase } from "./showcase"
 
@@ -9,6 +10,8 @@ export const metadata: Metadata = {
 }
 
 export default function DesignPage({ searchParams }: PageProps<"/dev/design">) {
+  // A design-review tool for local development only: production (`next start`) answers 404.
+  if (process.env.NODE_ENV !== "development") notFound()
   return (
     <Suspense>
       <Showcase searchParams={searchParams} />

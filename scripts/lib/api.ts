@@ -52,7 +52,7 @@ export interface ApiResult<T = unknown> {
 
 export async function api<T = unknown>(
   token: string,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {

@@ -713,3 +713,45 @@ PASS  paging       n=200  p50     8 ms  p95     9 ms  (target p95 < 300 ms)
 
 Paging was measured over a 1,510-result snapshot (76 pages). This pass didn't change the server, so these are
 the same numbers before and after. The eval is unchanged too (macro P/R/F1 1.000).
+
+## Hydration (#418) and a clean browser console
+
+- **Root cause of #418 on /search: two Suspense boundaries hydrating at different times shared React Query
+  data.** With partial prerendering, the app shell is the static part and hydrates first. Its `Plan` badge then
+  fetches `/api/plan`. The page (`SearchPage`, behind `<Suspense>` because it reads `?s=`) streams in and hydrates
+  later. When `/api/plan` answered first (typical on a repeat load with a warm HTTP cache), `SearchQuota` read
+  the finished plan during its hydration render. Globex is paid, so it rendered nothing where the server HTML had
+  the loading skeleton. Found by diffing the streamed server HTML against the client DOM of a failing load:
+  `<div><div data-slot="skeleton"></div></div>` vs `<div></div>`. Dev mode never showed it because nothing is
+  prerendered at build time there, and cold loads rarely lose the race. That's why it looked prod-only and flaky.
+- **Fix: shared queries report "pending" during the caller's hydration render** (`usePendingUntilHydrated` in
+  `src/hooks/use-hydrated.ts`, applied in `usePlan` and `useSavedBriefs`). Those are the two queries the shell
+  reads. Page components read them too (`SearchQuota`, the /saved page), and /saved had the same latent race.
+  The hydration render now matches the server's skeleton, and the data appears one render later. Queries read
+  only inside one page boundary can't race: nothing fetches them before that boundary hydrates. The fix uses no
+  `suppressHydrationWarning`; the only one is on `<html>` for next-themes, as before.
+- **Other usual causes, checked and ruled out:** the theme is applied by next-themes' inline script and
+  ThemeToggle shows a neutral icon until hydrated (now via the same `useHydrated` hook). The rotating placeholder
+  starts at a fixed index and only advances in an effect. No persisted zustand stores, no `typeof window`
+  branches in render. Locale-dependent output (`toLocaleString`, the saved-search date) only formats fetched data,
+  which is never in the server HTML.
+- **Sign-out is a full page load to /login.** It used to be `router.replace` + `refresh()`, which kept the
+  signed-in shell mounted in the router (hidden). Its nav links then re-prefetched /search, /shortlists and
+  /saved as a signed-out user: the proxy redirected each to /login, the segment prefetch asked /login for a
+  /search segment, and it answered 404, three console errors per sign-out. The proxy can't tell a prefetch
+  apart (Next strips its router headers before the proxy runs). A document load also leaves none of the previous
+  recruiter's UI or caches in the tab.
+- **`/dev/design` is development-only:** the page calls `notFound()` unless `NODE_ENV === 'development'`, so
+  `next start` answers 404 to everyone (it stays a public path in the proxy, so signed-out visitors get the same
+  404, not a login redirect). Nothing in the app links to it.
+- **`npm run check:hydration`** (Playwright, `scripts/check-hydration.ts`) signs in through the form in a fresh
+  browser profile and loads each page, then reloads it twice: /login, /search, `?s=`, `?s=&p=` (candidate sheet),
+  /shortlists, /shortlists/{id}, /saved. It then signs out and back in, and fails on any console error, console
+  warning or uncaught error. It catches the original bug reliably: both runs against the pre-fix build failed on
+  every /search variant. Two deliberate exceptions:
+  - rotto.com images are answered with a local placeholder. That host rate-limits (429) and blocks headless
+    Chrome (403), and the check is about our pages, not a third-party CDN.
+  - Next's own dev notice "Route … is rendering with server caches disabled" is allowed. It appears only on each
+    route's first on-demand compile in a freshly started `next dev`, never on a warm dev server, and the code
+    path doesn't exist in production.
+  It uses Playwright's Chromium when installed, otherwise the local Google Chrome, so it adds no setup step.

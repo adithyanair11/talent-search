@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronsUpDownIcon, Loader2Icon, LogOutIcon } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { toast } from "@/components/toast"
 import {
   DropdownMenu,
@@ -35,17 +35,7 @@ export function AccountMenu({ companyName, email }: { companyName: string; email
   const signOut = useSignOut()
   const [open, setOpen] = useState(false)
 
-  // The menu stays open while signing out (to show the spinner). With cacheComponents the shell stays mounted,
-  // hidden in <Activity>, and is shown again on the next sign-in, so close it and drop the finished sign-out when
-  // it is hidden (effects are cleaned up then).
-  const { reset } = signOut
-  useEffect(
-    () => () => {
-      reset()
-      setOpen(false)
-    },
-    [reset],
-  )
+  // The menu stays open while signing out (to show the spinner) until sign-out loads /login as a new document.
 
   function onSignOut() {
     signOut.mutate(undefined, {

@@ -2,7 +2,7 @@
 
 The source of truth for how the recruiter app looks and behaves. Tokens live in `src/app/globals.css`;
 components live in `src/components`. Every token and component is shown in every state at **`/dev/design`**
-(not linked from the app, `noindex`), in light and dark side by side, with a **375px** view (real-viewport
+(`make dev` only, 404 in production builds; not linked from the app, `noindex`), in light and dark side by side, with a **375px** view (real-viewport
 iframes). Review every change there.
 
 **Direction:** the sleek, quiet feel of an LLM tool. The search is a centred composer on an airy, warm page.

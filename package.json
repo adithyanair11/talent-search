@@ -17,6 +17,7 @@
     "probe:security": "tsx --conditions=react-server scripts/probe-security.ts",
     "test:quota": "tsx --conditions=react-server scripts/test-quota.ts",
     "bench": "tsx --conditions=react-server scripts/bench.ts",
+    "check:hydration": "tsx --conditions=react-server scripts/check-hydration.ts",
     "seed": "tsx --conditions=react-server scripts/seed.ts"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "playwright": "1.63.0",
     "shadcn": "^4.21.4",
     "supabase": "2.119.0",
     "tailwindcss": "^4",

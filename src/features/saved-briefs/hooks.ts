@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from "react"
 import type { Plan } from "@/components/plan-badge"
 import { toast, toastUndo } from "@/components/toast"
 import { planKeys } from "@/features/plan/hooks"
+import { usePendingUntilHydrated } from "@/hooks/use-hydrated"
 import { useUpgradeStore } from "@/features/plan/store"
 import { useRunSearch } from "@/features/search/hooks"
 import { ApiError } from "@/lib/api-client"
@@ -17,12 +18,17 @@ import { searchKey } from "./same-search"
 
 export const savedBriefKeys = { all: ["saved-briefs"] as const }
 
-/** GET /api/saved-briefs: the company's saved searches, newest first. */
+/**
+ * GET /api/saved-briefs: the company's saved searches, newest first. Read by the shell sidebar and by pages, so it
+ * stays pending while the caller hydrates (see `usePendingUntilHydrated`).
+ */
 export function useSavedBriefs() {
-  return useQuery({
-    queryKey: savedBriefKeys.all,
-    queryFn: ({ signal }) => fetchSavedBriefs(signal).then((r) => r.saved_briefs),
-  })
+  return usePendingUntilHydrated(
+    useQuery({
+      queryKey: savedBriefKeys.all,
+      queryFn: ({ signal }) => fetchSavedBriefs(signal).then((r) => r.saved_briefs),
+    }),
+  )
 }
 
 /** Whether this exact brief + filters is already saved (drives the "Saved" state of the button). */

@@ -1,7 +1,6 @@
 "use client"
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
 
 /**
  * supabase-js (~220 KB: auth, realtime, storage, postgrest) is only needed at the moment someone signs in or out,
@@ -34,10 +33,14 @@ export function useSignIn() {
   })
 }
 
-/** Sign out this browser only, clear cached data, and return to /login. */
+/**
+ * Sign out this browser only and return to /login with a full page load. A client-side navigation would keep the
+ * signed-in app shell mounted (hidden) in the router, still holding the previous recruiter's UI, and its nav links
+ * would re-prefetch /search, /shortlists and /saved as a signed-out user (each answered 404 via the login
+ * redirect, a console error). A document load starts the next session from nothing. docs/decisions.md ("Hydration").
+ */
 export function useSignOut() {
   const queryClient = useQueryClient()
-  const router = useRouter()
   return useMutation({
     mutationFn: async () => {
       const { error } = await (await loadSupabase()).auth.signOut({ scope: "local" })
@@ -45,8 +48,7 @@ export function useSignOut() {
     },
     onSuccess: () => {
       queryClient.clear()
-      router.replace("/login")
-      router.refresh()
+      window.location.replace("/login")
     },
   })
 }

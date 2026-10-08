@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-/** Pages reachable without a session. */
+/** Pages reachable without a session. /dev/design 404s outside development (the page checks NODE_ENV). */
 const PUBLIC_PAGES = ['/login', '/dev/design']
 
 /**
