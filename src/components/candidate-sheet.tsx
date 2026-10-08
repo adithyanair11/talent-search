@@ -59,6 +59,14 @@ type CandidateSheetProps = {
  * Candidate detail: right side sheet ≥ 768px, full-height bottom drawer below. Heavy and opened on demand —
  * import it with `next/dynamic` from feature code.
  */
+/**
+ * The sheet is modal, but toasts raised from it ("Added to Frontend Q4 · Undo") must stay clickable without
+ * closing it: a pointer-down on the toaster doesn't count as "outside".
+ */
+function keepOpenForToasts(e: { target: EventTarget | null; preventDefault: () => void }) {
+  if (e.target instanceof Element && e.target.closest("[data-sonner-toaster]")) e.preventDefault()
+}
+
 export function CandidateSheet(props: CandidateSheetProps) {
   const isDesktop = useIsDesktop()
   const { open, onOpenChange, candidate, actions, status } = props
@@ -72,6 +80,7 @@ export function CandidateSheet(props: CandidateSheetProps) {
           side="right"
           showCloseButton={false}
           onOpenAutoFocus={focusContainer}
+          onInteractOutside={keepOpenForToasts}
           className="w-full gap-0 p-0 outline-none sm:max-w-[480px]"
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
@@ -96,6 +105,7 @@ export function CandidateSheet(props: CandidateSheetProps) {
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
         onOpenAutoFocus={focusContainer}
+        onInteractOutside={keepOpenForToasts}
         className={cn(
           "outline-none pt-[env(safe-area-inset-top)]",
           "data-[vaul-drawer-direction=bottom]:mt-0 data-[vaul-drawer-direction=bottom]:h-dvh data-[vaul-drawer-direction=bottom]:max-h-dvh",

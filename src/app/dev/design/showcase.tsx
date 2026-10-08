@@ -27,6 +27,7 @@ import {
   CandidateListSkeleton,
   CandidateRow,
   CandidateRowSkeleton,
+  ShortlistIconButton,
 } from "@/components/candidate-row"
 import { CandidateSheet } from "@/components/candidate-sheet"
 import { CompanyLogo } from "@/components/company-logo"
@@ -49,7 +50,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { UpgradeDialog } from "@/components/upgrade-dialog"
-import type { CandidateDetail } from "@/lib/candidate"
+import type { CandidateDetail, CandidateSummary } from "@/lib/candidate"
 import { cn } from "@/lib/utils"
 import { FIXTURE_CANDIDATES } from "./fixtures"
 
@@ -556,6 +557,12 @@ function CandidateRowSection() {
     },
     [shortlisted],
   )
+  const renderShortlist = useCallback(
+    (c: CandidateSummary, on: boolean) => (
+      <ShortlistIconButton name={c.full_name} shortlisted={on} pending={c.id === JUNIOR.id} onClick={() => toggle(c.id)} />
+    ),
+    [toggle],
+  )
 
   return (
     <Section id="candidate-row" title="CandidateRow">
@@ -569,8 +576,7 @@ function CandidateRowSection() {
               onOpen={setSelected}
               selected={selected === c.id}
               shortlisted={shortlisted.has(c.id)}
-              shortlistPending={c.id === JUNIOR.id}
-              onToggleShortlist={toggle}
+              renderShortlist={renderShortlist}
               matchedSkills={matched}
               priority={i < 2}
             />
@@ -586,6 +592,8 @@ function CandidateRowSection() {
     </Section>
   )
 }
+
+const renderIdleShortlist = (c: CandidateSummary, on: boolean) => <ShortlistIconButton name={c.full_name} shortlisted={on} />
 
 /* ——— Results (all four data-view states) ——— */
 
@@ -604,7 +612,7 @@ function ResultsSection() {
         {state === "success" && (
           <CandidateList>
             {FIXTURE_CANDIDATES.map((c, i) => (
-              <CandidateRow key={c.id} candidate={c} rank={i + 1} onOpen={noop} onToggleShortlist={noop} />
+              <CandidateRow key={c.id} candidate={c} rank={i + 1} onOpen={noop} renderShortlist={renderIdleShortlist} />
             ))}
           </CandidateList>
         )}

@@ -1,7 +1,7 @@
 "use client"
 
 import { BookmarkIcon, Loader2Icon, MapPinIcon } from "lucide-react"
-import { memo } from "react"
+import { type ComponentProps, memo, type ReactNode } from "react"
 import { CandidateAvatar } from "@/components/candidate-avatar"
 import { CompanyLogo } from "@/components/company-logo"
 import { Tag } from "@/components/tag"
@@ -24,9 +24,13 @@ type CandidateRowProps = {
   onPrefetch?: (id: string) => void
   /** Currently open in the sheet. */
   selected?: boolean
+  /** On at least one shortlist: passed to `renderShortlist` (keep it a boolean so memo holds). */
   shortlisted?: boolean
-  shortlistPending?: boolean
-  onToggleShortlist?: (id: string) => void
+  /**
+   * The row's shortlist control, usually `ShortlistIconButton` wrapped in a menu. Pass a stable function
+   * (module level or `useCallback`) so the memoised row doesn't re-render.
+   */
+  renderShortlist?: (candidate: CandidateSummary, shortlisted: boolean) => ReactNode
   /** Skills that matched the search — highlighted and sorted first. */
   matchedSkills?: ReadonlySet<string>
   priority?: boolean
@@ -43,8 +47,7 @@ export const CandidateRow = memo(function CandidateRow({
   onPrefetch,
   selected = false,
   shortlisted = false,
-  shortlistPending = false,
-  onToggleShortlist,
+  renderShortlist,
   matchedSkills,
   priority,
 }: CandidateRowProps) {
@@ -129,29 +132,45 @@ export const CandidateRow = memo(function CandidateRow({
         </div>
       </div>
 
-      {onToggleShortlist && (
-        <button
-          type="button"
-          onClick={() => onToggleShortlist(c.id)}
-          disabled={shortlistPending}
-          aria-pressed={shortlisted}
-          aria-label={shortlisted ? `Remove ${c.full_name} from shortlist` : `Shortlist ${c.full_name}`}
-          className={cn(
-            "relative z-10 -mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none sm:size-9",
-            "hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-            shortlisted && "text-primary hover:text-primary",
-          )}
-        >
-          {shortlistPending ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <BookmarkIcon className={cn("size-4", shortlisted && "fill-current")} />
-          )}
-        </button>
-      )}
+      {renderShortlist && <div className="relative z-10 -mt-1 -mr-2 shrink-0">{renderShortlist(c, shortlisted)}</div>}
     </article>
   )
 })
+
+/**
+ * The bookmark in a row: filled accent when the person is on any shortlist (`aria-pressed`), a spinner while
+ * pending. Forwards props and ref so a Popover / Drawer trigger can wrap it (`asChild`).
+ */
+export function ShortlistIconButton({
+  name,
+  shortlisted = false,
+  pending = false,
+  className,
+  ...props
+}: ComponentProps<"button"> & { name: string; shortlisted?: boolean; pending?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-pressed={shortlisted}
+      aria-label={shortlisted ? `${name} is shortlisted — change lists` : `Shortlist ${name}`}
+      className={cn(
+        "flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none sm:size-9",
+        "hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+        "data-[state=open]:bg-accent data-[state=open]:text-foreground",
+        shortlisted && "text-primary hover:text-primary data-[state=open]:text-primary",
+        className,
+      )}
+      {...props}
+    >
+      {pending ? (
+        <Loader2Icon className="size-4 animate-spin" />
+      ) : (
+        <BookmarkIcon className={cn("size-4", shortlisted && "fill-current")} />
+      )}
+    </button>
+  )
+}
 
 export function CandidateRowSkeleton() {
   return (

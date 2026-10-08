@@ -5,6 +5,7 @@ import { BookmarkIcon, HistoryIcon, RotateCwIcon, SearchIcon } from "lucide-reac
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Suspense } from "react"
 import {
   AppShell,
   SidebarBody,
@@ -31,6 +32,43 @@ const NAV: { href: Route; label: string; short: string; icon: React.ReactNode }[
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+/**
+ * Nav links with the current one marked. The pathname of a dynamic route (/shortlists/[id]) is runtime data,
+ * so the links prerender un-highlighted (the Suspense fallback) and the active state streams in.
+ */
+function Nav({ kind }: { kind: "sidebar" | "tabs" }) {
+  return (
+    <Suspense fallback={<NavLinks kind={kind} pathname={null} />}>
+      <CurrentNav kind={kind} />
+    </Suspense>
+  )
+}
+
+function CurrentNav({ kind }: { kind: "sidebar" | "tabs" }) {
+  return <NavLinks kind={kind} pathname={usePathname()} />
+}
+
+function NavLinks({ kind, pathname }: { kind: "sidebar" | "tabs"; pathname: string | null }) {
+  return NAV.map((item) => {
+    const active = pathname !== null && isActive(pathname, item.href)
+    return kind === "sidebar" ? (
+      <SidebarItem key={item.href} asChild active={active}>
+        <Link href={item.href}>
+          {item.icon}
+          <span className="min-w-0 truncate">{item.label}</span>
+        </Link>
+      </SidebarItem>
+    ) : (
+      <TabBarItem key={item.href} asChild active={active}>
+        <Link href={item.href}>
+          {item.icon}
+          <span>{item.short}</span>
+        </Link>
+      </TabBarItem>
+    )
+  })
 }
 
 /** Plan badge wired to GET /api/plan, with loading (skeleton) and error (retry) states. */
@@ -66,8 +104,6 @@ function Upgrade() {
  * Suspense because it reads the session); it appears in the sidebar header and the mobile top bar.
  */
 export function AppFrame({ account, children }: { account: React.ReactNode; children: React.ReactNode }) {
-  const pathname = usePathname()
-
   return (
     <>
       <AppShell
@@ -76,14 +112,7 @@ export function AppFrame({ account, children }: { account: React.ReactNode; chil
             <SidebarHeader>{account}</SidebarHeader>
             <SidebarBody>
               <SidebarSection>
-                {NAV.map((item) => (
-                  <SidebarItem key={item.href} asChild active={isActive(pathname, item.href)}>
-                    <Link href={item.href}>
-                      {item.icon}
-                      <span className="min-w-0 truncate">{item.label}</span>
-                    </Link>
-                  </SidebarItem>
-                ))}
+                <Nav kind="sidebar" />
               </SidebarSection>
             </SidebarBody>
             <SidebarFooter>
@@ -99,14 +128,7 @@ export function AppFrame({ account, children }: { account: React.ReactNode; chil
             <ThemeToggle />
           </div>
         }
-        tabBar={NAV.map((item) => (
-          <TabBarItem key={item.href} asChild active={isActive(pathname, item.href)}>
-            <Link href={item.href}>
-              {item.icon}
-              <span>{item.short}</span>
-            </Link>
-          </TabBarItem>
-        ))}
+        tabBar={<Nav kind="tabs" />}
       >
         {children}
       </AppShell>

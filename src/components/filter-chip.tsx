@@ -1,7 +1,8 @@
 "use client"
 
-import { AlertTriangleIcon, CheckIcon, PlusIcon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, PlusIcon, XIcon } from "lucide-react"
 import { memo } from "react"
+import { CheckboxIndicator } from "@/components/checkbox-indicator"
 import {
   Command,
   CommandEmpty,
@@ -200,15 +201,7 @@ export function FilterChipOptions({
             const text = formatOption ? formatOption(o) : o
             return (
               <CommandItem key={o} value={text} onSelect={() => onToggle(o)} className="gap-2">
-                <span
-                  aria-hidden
-                  className={cn(
-                    "flex size-4 items-center justify-center rounded-[4px] border border-border-strong",
-                    on && "border-primary bg-primary text-primary-foreground",
-                  )}
-                >
-                  {on && <CheckIcon className="size-3 text-current" />}
-                </span>
+                <CheckboxIndicator checked={on} />
                 {text}
               </CommandItem>
             )

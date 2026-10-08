@@ -129,15 +129,17 @@ One understood filter: `label · value`. Click it to edit in a popover; × remov
 
 ### CandidateRow — `candidate-row.tsx`
 One ranked result: rank (desktop), avatar, name, open-to-work dot, title · logo · company, location, years,
-top 3 skills plus an overflow count, and a shortlist button.
+top 3 skills plus an overflow count, and a shortlist control (`renderShortlist` slot).
 - The whole row opens the sheet (the name is a button stretched over the row). The shortlist button sits
   above it with a 44px touch target on mobile.
 - States: default, hover / keyboard focus (neutral tint), `selected` (open in the sheet: accent tint and a 2px
-  left bar, `aria-current`), `shortlisted` (filled accent bookmark, `aria-pressed`), `shortlistPending`
-  (spinner), avatar/logo fallback, truncation.
+  left bar, `aria-current`), `shortlisted` (passed to the slot), avatar/logo fallback, truncation.
+- The slot usually renders `ShortlistIconButton` (same file): a bookmark, filled accent when on any list
+  (`aria-pressed`), with a spinner while pending. It forwards its ref, so a Popover or Drawer trigger can wrap it.
+  Search results use `ShortlistMenu`; a shortlist's own page uses a remove button.
 - `matchedSkills` sorts matched skills first and tints them. This is computed from the search filters, never
   by the LLM.
-- `React.memo`: pass stable callbacks that take the id (`onOpen(id)`, `onToggleShortlist(id)`).
+- `React.memo`: pass stable callbacks that take the id (`onOpen(id)`) and a stable `renderShortlist(candidate, shortlisted)`.
 - Put rows in `CandidateList` (hairline-divided, `rounded-lg`). The loading state is
   `CandidateListSkeleton` / `CandidateRowSkeleton`. Virtualize result lists with `@tanstack/react-virtual`.
 - On mobile, the title and company stack on two lines and the skills wrap.
@@ -193,6 +195,15 @@ rows (see `/dev/design`). Don't use spinners for layout-sized areas. Spinners ar
   (from the badge). There is **no checkout** in this app. The copy says the plan updates automatically once
   billing confirms, which happens through the Stripe webhook. Pass `action` only if a real primary action
   exists.
+
+### AvatarStack · CheckboxIndicator · ConfirmDialog
+- `AvatarStack` (`avatar-stack.tsx`): up to 4 overlapping 24px `CandidateAvatar`s with a `ring-card` gap and a
+  "+N" pill. It is decorative, so the owner states the count in text (shortlist cards).
+- `CheckboxIndicator` (`checkbox-indicator.tsx`): the box drawn inside a `CommandItem` that toggles. It is shared
+  by `FilterChipOptions` and the shortlist menu.
+- `ConfirmDialog` (`confirm-dialog.tsx`): only for destructive actions that are hard to take back (deleting a
+  whole shortlist). It is a Dialog from 768px up and a Drawer below, with Cancel focused first. Load it with
+  `next/dynamic`.
 
 ### Toasts — `toast.ts` + `ui/sonner.tsx`
 The `<Toaster />` is mounted once in `Providers`. It sits bottom-right on desktop and above the tab bar on

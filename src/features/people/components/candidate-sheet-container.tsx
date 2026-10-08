@@ -1,9 +1,10 @@
 "use client"
 
-import { BookmarkIcon } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { ShortlistMenu } from "@/features/shortlists/components/shortlist-menu"
+import { useShortlistedIds } from "@/features/shortlists/hooks"
+import { useIsDesktop } from "@/hooks/use-media-query"
 import { ApiError } from "@/lib/api-client"
 import { usePerson, usePrefetchPerson } from "../hooks"
 
@@ -51,6 +52,8 @@ export function CandidateSheetContainer({
 
   const query = usePerson(shownId)
   const prefetch = usePrefetchPerson()
+  const shortlisted = useShortlistedIds()
+  const isDesktop = useIsDesktop()
   const open = personId !== null
 
   const index = shownId === null ? -1 : ids.indexOf(shownId)
@@ -101,10 +104,14 @@ export function CandidateSheetContainer({
       onNext={inList ? (nextId ? () => onStep(nextId) : null) : undefined}
       positionLabel={inList && total !== undefined ? `${index + 1} of ${total.toLocaleString()}` : undefined}
       actions={
-        // Shortlisting is wired in the next task; the slot and its placement are final.
-        <Button disabled>
-          <BookmarkIcon /> Shortlist
-        </Button>
+        query.data && (
+          <ShortlistMenu
+            person={query.data}
+            shortlisted={shortlisted.has(query.data.id)}
+            variant="button"
+            nested={!isDesktop}
+          />
+        )
       }
     />
   )

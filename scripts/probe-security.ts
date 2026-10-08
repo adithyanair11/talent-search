@@ -267,7 +267,13 @@ async function main(): Promise<void> {
     await blocked('rpc', 'jsonb_text_array (private helper)', a.rpc('jsonb_text_array' as never, { arr: [] } as never))
 
     // ---- API routes (skipped when the dev server or route isn't there yet) -------------------------
-    await probeApi(acme.token, { shortlistId: gShortlist.id, searchId: gSearch.id, briefId: gBrief.id })
+    await probeApi(acme.token, {
+      shortlistId: gShortlist.id,
+      shortlistName: gShortlist.name,
+      ownShortlistId: aShortlist.id,
+      searchId: gSearch.id,
+      briefId: gBrief.id,
+    })
 
     // ---- globex fixtures and counters unchanged -----------------------------------------------------
     const after = {
@@ -303,13 +309,39 @@ async function main(): Promise<void> {
   }
 }
 
-async function probeApi(token: string, ids: { shortlistId: string; searchId: string; briefId: string }): Promise<void> {
-  const cases: { name: string; method: string; path: string; mustNotContain?: string }[] = [
-    { name: 'GET /api/shortlists hides globex', method: 'GET', path: '/api/shortlists', mustNotContain: ids.shortlistId },
-    { name: 'PATCH globex shortlist', method: 'PATCH', path: `/api/shortlists/${ids.shortlistId}` },
-    { name: 'DELETE globex shortlist', method: 'DELETE', path: `/api/shortlists/${ids.shortlistId}` },
-    { name: 'add person to globex shortlist', method: 'POST', path: `/api/shortlists/${ids.shortlistId}/people/cand_0003` },
-    { name: 'remove person from globex shortlist', method: 'DELETE', path: `/api/shortlists/${ids.shortlistId}/people/cand_0001` },
+type ApiCase = {
+  name: string
+  method: string
+  path: string
+  body?: unknown
+  /** Passes when the response is OK and the body doesn't contain this (a list must hide the other company). */
+  mustNotContain?: string
+  /** Passes on exactly this status (controls and validation); default: 404 or 403. */
+  expect?: number
+}
+
+async function probeApi(
+  token: string,
+  ids: { shortlistId: string; shortlistName: string; ownShortlistId: string; searchId: string; briefId: string },
+): Promise<void> {
+  const g = ids.shortlistId
+  const cases: ApiCase[] = [
+    { name: 'GET /api/shortlists hides globex', method: 'GET', path: '/api/shortlists', mustNotContain: g },
+    { name: 'GET /api/shortlists hides globex names', method: 'GET', path: '/api/shortlists', mustNotContain: ids.shortlistName },
+    { name: 'GET globex shortlist', method: 'GET', path: `/api/shortlists/${g}` },
+    { name: 'PATCH globex shortlist', method: 'PATCH', path: `/api/shortlists/${g}`, body: { name: 'pwned' } },
+    { name: 'DELETE globex shortlist', method: 'DELETE', path: `/api/shortlists/${g}` },
+    { name: 'add person to globex shortlist', method: 'POST', path: `/api/shortlists/${g}/people/cand_0003` },
+    { name: 'remove person from globex shortlist', method: 'DELETE', path: `/api/shortlists/${g}/people/cand_0001` },
+    { name: 'shortlist id injection', method: 'GET', path: `/api/shortlists/${encodeURIComponent("1' or '1'='1")}` },
+    {
+      name: 'create shortlist with smuggled company_id',
+      method: 'POST',
+      path: '/api/shortlists',
+      body: { name: `${TAG} smuggle`, company_id: 'globex' },
+      expect: 400,
+    },
+    { name: 'control: GET own shortlist', method: 'GET', path: `/api/shortlists/${ids.ownShortlistId}`, expect: 200 },
     { name: 'GET /api/saved-briefs hides globex', method: 'GET', path: '/api/saved-briefs', mustNotContain: ids.briefId },
     { name: 'DELETE globex saved brief', method: 'DELETE', path: `/api/saved-briefs/${ids.briefId}` },
     { name: 'page globex search', method: 'GET', path: `/api/search/${ids.searchId}?page=1` },
@@ -320,20 +352,23 @@ async function probeApi(token: string, ids: { shortlistId: string; searchId: str
       res = await fetch(API_BASE + c.path, {
         method: c.method,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: c.method === 'PATCH' ? JSON.stringify({ name: 'pwned' }) : undefined,
+        body: c.body === undefined ? undefined : JSON.stringify(c.body),
         signal: AbortSignal.timeout(5000),
       })
     } catch {
       record('skip', 'api', c.name, `server not reachable at ${API_BASE}`)
       continue
     }
+    // Next's own HTML 404 means the route doesn't exist yet. Any other non-JSON response (e.g. a 204 from a
+    // DELETE that succeeded) is judged, so a successful cross-tenant write can never hide as a skip.
     const isJson = res.headers.get('content-type')?.includes('application/json') ?? false
-    if (!isJson) {
+    if (!isJson && res.status === 404) {
       record('skip', 'api', c.name, `route not implemented (${res.status})`)
       continue
     }
     const body = await res.text()
     if (c.mustNotContain) record(res.ok && !body.includes(c.mustNotContain), 'api', c.name, `${res.status}`)
+    else if (c.expect !== undefined) record(res.status === c.expect, 'api', c.name, `${res.status}`)
     else record(res.status === 404 || res.status === 403, 'api', c.name, `${res.status}`)
   }
 }

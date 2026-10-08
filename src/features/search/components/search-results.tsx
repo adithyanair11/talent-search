@@ -4,6 +4,8 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { CandidateList, CandidateRow, CandidateRowSkeleton } from "@/components/candidate-row"
 import { ErrorState } from "@/components/error-state"
+import { renderShortlistMenu } from "@/features/shortlists/components/shortlist-menu"
+import { useShortlistedIds } from "@/features/shortlists/hooks"
 import type { SearchResult } from "@/lib/schemas/search"
 
 /** Load the next page when the last rendered row is this close to the end of what's loaded. */
@@ -36,6 +38,7 @@ export function SearchResults({
   onPrefetch: (id: string) => void
 }) {
   const listRef = useRef<HTMLDivElement>(null)
+  const shortlisted = useShortlistedIds()
   const [scrollMargin, setScrollMargin] = useState(0)
 
   // The list's offset from the top of the page, kept current as content above it (chips, notes) changes.
@@ -90,6 +93,8 @@ export function SearchResults({
                   onOpen={onOpen}
                   onPrefetch={onPrefetch}
                   selected={candidate.id === selectedId}
+                  shortlisted={shortlisted.has(candidate.id)}
+                  renderShortlist={renderShortlistMenu}
                   matchedSkills={matchedSkills}
                   priority={item.index < 2}
                 />

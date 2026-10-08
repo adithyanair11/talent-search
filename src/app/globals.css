@@ -271,3 +271,8 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* A modal sheet sets `pointer-events: none` on <body>; toasts (and their Undo) must stay clickable above it. */
+[data-sonner-toaster] {
+  pointer-events: auto;
+}

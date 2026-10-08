@@ -359,7 +359,7 @@ expected sets don't depend on the code under test.
   not compute them.
 - **Infinite paging calls `fetchNextPage({ cancelRefetch: false })`.** The virtualizer can ask again before
   `isFetchingNextPage` flips, and the default cancels and re-sends the page in flight.
-- **Shortlisting from rows arrives with the shortlists feature.**
+- **Shortlisting from rows** is wired by the shortlists feature (see "Shortlists").
 
 ## Candidate profile (`GET /api/people/{id}`, CandidateSheet)
 
@@ -380,3 +380,39 @@ expected sets don't depend on the code under test.
   doesn't flash. Arrow keys are ignored in inputs and when a modifier is held.
 - **Role durations use whole years** (the data has no months): a role that starts and ends in the same year is
   "< 1 yr", and a current role runs to the current year.
+
+## Shortlists (`/api/shortlists/*`, /shortlists)
+
+- **No migration.** The init schema already has `shortlists` (unique `(company_id, lower(name))`), `shortlist_people`
+  (PK `(shortlist_id, person_id)`, composite FK to the list *and* its company) and company-scoped RLS. Every route
+  uses the caller's RLS client.
+- **Another company's list is a 404 on every route**, never a 403 or an empty 200. Member routes first look the list
+  up through RLS, so a foreign id fails as "not found" before any insert or delete (an RLS or FK error would
+  otherwise leak which ids exist). Malformed ids (not a uuid / not `cand_<digits>`) are also 404, as for people.
+- **Names: trimmed, 1–60 characters in the API** (the DB check allows 100 as a backstop) and unique per company
+  case-insensitively. A duplicate is a 409 with a sentence the UI shows as is ("You already have a list called …").
+  The UI checks the same rules first against the cached lists, so most duplicates never make a round trip.
+  An invalid body is a 400, through the shared Zod mapping (same as search).
+- **Add is idempotent through `ON CONFLICT DO NOTHING`** (`upsert … ignoreDuplicates`). That needs only the
+  insert grant, so members still can't be updated. It returns 201 `{ added: true }` the first time and 200
+  `{ added: false }` on a repeat. Remove is idempotent too (204 even when the person wasn't on the list).
+- **`GET /api/shortlists` returns `{ shortlists: [...] }`** with each list's `count`, up to 4 `avatar_urls` (most
+  recently added first) and every `person_ids`. Member ids let one cached query drive both the filled bookmark on
+  every row and the popover checkboxes. Rows then get a plain boolean, so memo holds and there are no per-row
+  requests. Lists are small, so the payload stays small. Lists are ordered newest first.
+- **Membership changes are optimistic, with Undo.** The bookmark and checkbox flip at once. A refusal rolls back
+  from a snapshot and shows an error toast. Success shows "Added to Frontend Q4 · Undo". The callbacks live on the
+  mutation, not the component, so Undo still works after a virtualized row or the popover unmounts.
+- **Deleting a list asks for confirmation and then offers Undo** (design.md: "deleting a whole shortlist may use
+  both"). Undo re-creates the list with the same name and re-adds its members oldest first, so the order is
+  kept. The restored list has a **new id**: old links to it 404. This avoids soft-delete columns for a 6-second
+  window.
+- **Toasts stay clickable over the modal candidate sheet.** Radix sets `pointer-events: none` on `<body>`.
+  `[data-sonner-toaster]` opts back in, and the sheet ignores outside interactions that land on the toaster.
+- **The shortlist menu is a Popover from 768px up and a nested Drawer below.** Its body (search, checkboxes,
+  "New list…") is a `next/dynamic` chunk that loads on open or on trigger hover. Search-as-you-type filters the
+  cached lists locally (cmdk), so there is no network call to debounce.
+- **The app frame's active-nav state sits behind Suspense.** `usePathname()` on a dynamic route (/shortlists/[id])
+  is runtime data under cacheComponents. Its links prerender un-highlighted and the active state streams in.
+- **`probe:security` now judges non-JSON responses.** Only Next's HTML 404 ("route not built yet") counts as a skip.
+  Before this, a 204 from a successful cross-tenant DELETE would have been skipped instead of failed.
