@@ -17,8 +17,8 @@ make dev     # http://localhost:3000
 ```
 
 Demo logins (password `rotto-assessment`, also shown on the login page): `recruiter@acme.test`,
-`recruiter@globex.test`. Both companies start on the free plan. `npm run replay:stripe` replays the sample
-webhooks, which leaves globex paid and acme free.
+`recruiter@globex.test`. Both companies start on the free plan with no billing state.
+To try the paid plan locally: make demo-paid. (`make reset-quota` gives both companies their free search back.)
 Checks: `npm run eval | test:quota | replay:stripe | probe:security | bench` (each needs `make dev` running).
 
 ## How search works

@@ -18,7 +18,8 @@
     "test:quota": "tsx --conditions=react-server scripts/test-quota.ts",
     "bench": "tsx --conditions=react-server scripts/bench.ts",
     "check:hydration": "tsx --conditions=react-server scripts/check-hydration.ts",
-    "seed": "tsx --conditions=react-server scripts/seed.ts"
+    "seed": "tsx --conditions=react-server scripts/seed.ts",
+    "reset:quota": "tsx --conditions=react-server scripts/reset-quota.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

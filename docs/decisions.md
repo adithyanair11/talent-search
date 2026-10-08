@@ -786,3 +786,17 @@ What changed and why:
 - **Alignment:** Shortlists uses the same `max-w-3xl` column as Search and Saved searches (2-up grid), and
   bottom-drawer headers are left-aligned again (the vaul primitive's `text-center` beat `text-left`, leaving the
   upgrade mark and text misaligned).
+
+## Local demo helpers (`make demo-paid`, `make reset-quota`)
+
+- **`make setup` stays clean: both companies free, no subscriptions or stripe_events.** Graders test the free
+  limit and send their own Stripe events from a clean state, so seeding must not pre-apply billing events. A
+  fresh setup therefore allows two searches in total (one per company) before every search returns 402.
+- **`make demo-paid`** runs `npm run replay:stripe` (needs `make dev` running), which leaves globex paid and acme
+  free, the sample file's `expected_plans_after`. The paid state comes from real signed webhook deliveries, as the
+  plan rules require.
+- **`make reset-quota`** (`scripts/reset-quota.ts`) sets `searches_used = 0` for every company with the admin
+  client. It leaves searches, subscriptions and stripe_events alone. It refuses any Supabase URL whose host isn't
+  localhost/127.0.0.1/[::1], so it can't be pointed at a real database by accident.
+- **Neither is called by `make setup` or `make dev`.** They exist only so a local demo isn't stuck behind the
+  402 after two searches.

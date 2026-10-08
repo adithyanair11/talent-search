@@ -1,7 +1,7 @@
 # Talent Search — local dev entry points. Assumes only Docker running + Node 24.
 # Every target is safe to run repeatedly.
 
-.PHONY: setup dev stop reset test eval check-prereqs install supabase-up env
+.PHONY: setup dev stop reset demo-paid reset-quota test eval check-prereqs install supabase-up env
 
 SUPABASE := npx supabase
 
@@ -22,6 +22,15 @@ stop:
 reset: check-prereqs supabase-up
 	$(SUPABASE) db reset
 	npm run seed
+
+# Local demos only — never called by setup/dev, which leave both companies free with no billing state.
+# Replays data/stripe-events.json through the webhook (needs `make dev` running): globex paid, acme free.
+demo-paid:
+	npm run replay:stripe
+
+# Local demos only: gives every company its free search back (searches_used = 0). Refuses non-local Supabase.
+reset-quota:
+	npm run reset:quota
 
 test:
 	npm test
